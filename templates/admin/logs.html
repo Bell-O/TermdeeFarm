@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Logs - Termdee Farm{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="card-title">Logs ระบบ</h1>
+    </div>
+
+    {% if logs %}
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>เวลา</th>
+                    <th>ผู้ทำ</th>
+                    <th class="text-center">บทบาท</th>
+                    <th class="text-center">การกระทำ</th>
+                    <th class="text-right">จำนวน</th>
+                    <th>ข้อความ</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td data-label="เวลา">{{ log.created_at.strftime('%d/%m/%Y %H:%M:%S') }}</td>
+                    <td data-label="ผู้ทำ">{{ log.actor.display_name if log.actor else '-' }}</td>
+                    <td data-label="บทบาท" class="text-center"><span class="badge badge-{{ log.actor_role }}">{{ log.actor_role }}</span></td>
+                    <td data-label="การกระทำ" class="text-center"><span class="badge badge-primary">{{ log.action }}</span></td>
+                    <td data-label="จำนวน" class="text-right number">{% if log.delta_amount != 0 %}{{ "{:,}".format(log.delta_amount) }}{% else %}-{% endif %}</td>
+                    <td data-label="ข้อความ">{{ log.message }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-center">ยังไม่มี Log</p>
+    {% endif %}
+</div>
+{% endblock %}
+
+
+

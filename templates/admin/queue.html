@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}คิวงาน - Termdee Farm{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="card-title">คิวงาน</h1>
+        <button id="toggleRefreshBtn" class="btn btn-warning" onclick="toggleAutoRefresh()">
+            <i class="fas fa-pause"></i> หยุด Auto-Refresh
+        </button>
+    </div>
+
+    {% if queue_data %}
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th class="text-center">คิว</th>
+                    <th>Order Key</th>
+                    <th>ลูกค้า</th>
+                    <th>เซิร์ฟเวอร์</th>
+                    <th>ประเภท</th>
+                    <th class="text-center">สถานะ</th>
+                    <th class="text-center">เวลารอโดยประมาณ</th>
+                    <th class="text-center">จัดการ</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in queue_data %}
+                <tr>
+                    <td data-label="คิว" class="text-center">
+                        {% if item.queue_info %}
+                            <strong>#{{ item.queue_info.position }}</strong>
+                        {% else %}
+                            <strong>-</strong>
+                        {% endif %}
+                    </td>
+                    <td data-label="Order Key"><strong>{{ item.order.order_key }}</strong></td>
+                    <td data-label="ลูกค้า">{{ item.order.customer_ref or '-' }}</td>
+                    <td data-label="เซิร์ฟเวอร์">{{ item.order.server_name or '-' }}</td>
+                    <td data-label="ประเภท"><span class="item-{{ item.order.item_type }}">{{ item.order.item_type|upper }}</span></td>
+                    <td data-label="สถานะ" class="text-center"><span class="badge badge-{{ item.order.status }}">{{ get_status_th(item.order.status) }}</span></td>
+                    <td data-label="เวลารอโดยประมาณ" class="text-center">
+                        {% if item.queue_info %}
+                            {{ item.queue_info.eta_display }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td data-label="จัดการ" class="text-center">
+                        <a href="{{ url_for('admin_order_detail', order_id=item.order.id) }}" class="btn btn-sm btn-primary">ดู</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-center">ไม่มีงานในคิว</p>
+    {% endif %}
+</div>
+
+<script>
+// Auto-refresh ทุก 60 วินาที (1 นาที)
+let refreshInterval = null;
+let autoRefreshEnabled = localStorage.getItem('autoRefresh') !== 'false';
+
+function startAutoRefresh() {
+    if (refreshInterval) clearInterval(refreshInterval);
+    if (autoRefreshEnabled) {
+        refreshInterval = setInterval(() => {
+            location.reload();
+        }, 60000); // 60 วินาที
+    }
+}
+
+function toggleAutoRefresh() {
+    autoRefreshEnabled = !autoRefreshEnabled;
+    localStorage.setItem('autoRefresh', autoRefreshEnabled);
+    startAutoRefresh();
+    const btn = document.getElementById('toggleRefreshBtn');
+    if (btn) {
+        btn.innerHTML = autoRefreshEnabled 
+            ? '<i class="fas fa-pause"></i> หยุด Auto-Refresh' 
+            : '<i class="fas fa-play"></i> เปิด Auto-Refresh';
+        btn.className = autoRefreshEnabled ? 'btn btn-warning' : 'btn btn-success';
+    }
+}
+
+startAutoRefresh();
+</script>
+{% endblock %}
+

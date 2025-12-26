@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}รายงานและสถิติ - Termdee Farm{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="card-title">รายงานและสถิติ</h1>
+        <div class="btn-group">
+            <button class="btn btn-success" onclick="exportPayments()">
+                <i class="fas fa-download"></i> Export CSV
+            </button>
+            <button class="btn btn-danger" onclick="exportPaymentsPDF()">
+                <i class="fas fa-file-pdf"></i> Export PDF
+            </button>
+        </div>
+    </div>
+
+    <!-- Filter -->
+    <div class="card mt-3" style="background: var(--bg-secondary);">
+        <form id="reportForm" onsubmit="loadReport(event)">
+            <div class="grid grid-3">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">วันที่เริ่มต้น</label>
+                    <input type="date" name="date_from" id="dateFrom" class="form-control">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">วันที่สิ้นสุด</label>
+                    <input type="date" name="date_to" id="dateTo" class="form-control">
+                </div>
+                <div class="form-group" style="margin-bottom: 0; display: flex; align-items: flex-end;">
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">
+                        <i class="fas fa-search"></i> โหลดรายงาน
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Summary -->
+    <div id="reportSummary" class="mt-3" style="display: none;">
+        <div class="grid grid-4">
+            <div class="card">
+                <h3>จำนวนงาน</h3>
+                <p id="totalTasks" style="font-size: 1.5rem; font-weight: bold; color: var(--primary-color);">-</p>
+            </div>
+            <div class="card">
+                <h3>จำนวนรวม</h3>
+                <p id="totalAmount" style="font-size: 1.5rem; font-weight: bold; color: var(--success-color);">-</p>
+            </div>
+            <div class="card">
+                <h3>รายได้รวม</h3>
+                <p id="totalRevenue" style="font-size: 1.5rem; font-weight: bold; color: var(--primary-color);">-</p>
+            </div>
+            <div class="card">
+                <h3>จ่ายให้คนฟาร์ม</h3>
+                <p id="totalPaid" style="font-size: 1.5rem; font-weight: bold; color: var(--success-color);">-</p>
+            </div>
+        </div>
+
+        <!-- Farmer Stats -->
+        <div class="card mt-3">
+            <h2>สถิติตามคนฟาร์ม</h2>
+            <div class="table-responsive">
+                <table class="table" id="farmerStatsTable">
+                    <thead>
+                        <tr>
+                            <th>คนฟาร์ม</th>
+                            <th class="text-right">จำนวนงาน</th>
+                            <th class="text-right">จำนวนรวม</th>
+                            <th class="text-right">รายได้รวม</th>
+                            <th class="text-right">เงินที่ได้รับ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="farmerStatsBody">
+                        <tr>
+                            <td colspan="5" class="text-center">กรุณาเลือกช่วงวันที่และกดโหลดรายงาน</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function loadReport(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    const params = new URLSearchParams();
+    
+    for (const [key, value] of formData.entries()) {
+        if (value) params.append(key, value);
+    }
+    
+    fetch(`/api/admin/reports/summary?${params.toString()}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                const summary = data.summary;
+                document.getElementById('totalTasks').textContent = summary.total_tasks;
+                document.getElementById('totalAmount').textContent = summary.total_amount.toLocaleString();
+                document.getElementById('totalRevenue').textContent = summary.total_revenue.toLocaleString() + ' บาท';
+                document.getElementById('totalPaid').textContent = summary.total_paid.toLocaleString() + ' บาท';
+                
+                // Farmer stats
+                const tbody = document.getElementById('farmerStatsBody');
+                tbody.innerHTML = '';
+                
+                if (data.farmer_stats && data.farmer_stats.length > 0) {
+                    data.farmer_stats.forEach(stat => {
+                        const row = tbody.insertRow();
+                        row.insertCell(0).textContent = stat.farmer_name;
+                        row.insertCell(1).textContent = stat.tasks;
+                        row.insertCell(2).textContent = stat.amount.toLocaleString();
+                        row.insertCell(3).textContent = stat.revenue.toLocaleString() + ' บาท';
+                        row.insertCell(4).textContent = stat.paid.toLocaleString() + ' บาท';
+                    });
+                } else {
+                    const row = tbody.insertRow();
+                    const cell = row.insertCell(0);
+                    cell.colSpan = 5;
+                    cell.className = 'text-center';
+                    cell.textContent = 'ไม่มีข้อมูล';
+                }
+                
+                document.getElementById('reportSummary').style.display = 'block';
+            } else {
+                alert(data.error || 'เกิดข้อผิดพลาด');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('เกิดข้อผิดพลาดในการโหลดรายงาน');
+        });
+}
+
+function exportPayments() {
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo = document.getElementById('dateTo').value;
+    
+    let url = '/api/admin/export/payments';
+    const params = new URLSearchParams();
+    if (dateFrom) params.append('date_from', dateFrom);
+    if (dateTo) params.append('date_to', dateTo);
+    if (params.toString()) url += '?' + params.toString();
+    
+    window.location.href = url;
+}
+
+function exportPaymentsPDF() {
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo = document.getElementById('dateTo').value;
+    
+    let url = '/api/admin/export/payments/pdf';
+    const params = new URLSearchParams();
+    if (dateFrom) params.append('date_from', dateFrom);
+    if (dateTo) params.append('date_to', dateTo);
+    if (params.toString()) url += '?' + params.toString();
+    
+    window.location.href = url;
+}
+
+// Set default dates (this month)
+window.addEventListener('DOMContentLoaded', function() {
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    
+    document.getElementById('dateFrom').value = firstDay.toISOString().split('T')[0];
+    document.getElementById('dateTo').value = lastDay.toISOString().split('T')[0];
+});
+</script>
+{% endblock %}
+
