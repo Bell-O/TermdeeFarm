@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}ข้อผิดพลาด {{ error_code }} - Termdee Farm{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 600px; margin: 3rem auto; text-align: center;">
+    <div class="card-header">
+        <h1 class="card-title" style="font-size: 4rem; color: var(--danger-color); margin: 0;">{{ error_code }}</h1>
+    </div>
+    <div style="padding: 2rem;">
+        <p style="font-size: 1.25rem; color: var(--text-secondary); margin-bottom: 2rem;">
+            {{ error_message }}
+        </p>
+        <div class="btn-group">
+            <a href="{{ url_for('index') }}" class="btn btn-primary">
+                <i class="fas fa-home"></i> กลับหน้าหลัก
+            </a>
+            {% if current_user.is_authenticated %}
+                {% if current_user.role in ['admin', 'super_admin'] %}
+                    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">
+                        <i class="fas fa-tachometer-alt"></i> แดชบอร์ด
+                    </a>
+                {% else %}
+                    <a href="{{ url_for('farmer_tasks') }}" class="btn btn-secondary">
+                        <i class="fas fa-tasks"></i> งานของฉัน
+                    </a>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+
+
+

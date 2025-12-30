@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}ติดตามออเดอร์ - Termdee Farm{% endblock %}
+
+{% block container_class %}main-layout{% endblock %}
+
+{% block content %}
+<div class="content-wrapper">
+<div class="card">
+    <div class="card-header">
+        <h1 class="card-title">ติดตามออเดอร์</h1>
+    </div>
+
+    <div class="card-body">
+        {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+
+        {% if not order %}
+            <!-- ฟอร์มค้นหาออเดอร์ -->
+            <form method="POST" action="{{ url_for('track_order') }}" class="mt-3">
+                <div class="form-group">
+                    <label class="form-label" for="order_key">Order Key</label>
+                    <input type="text" id="order_key" name="order_key" 
+                           class="form-control" 
+                           placeholder="กรุณาใส่ Order Key (เช่น ABC123)" 
+                           required 
+                           style="text-transform: uppercase;">
+                    <small style="color: var(--text-secondary);">
+                        ใส่ Order Key ที่ได้รับจากแอดมิน
+                    </small>
+                </div>
+                <button type="submit" class="btn btn-primary">ค้นหา</button>
+            </form>
+        {% else %}
+            <!-- แสดงข้อมูลออเดอร์ -->
+            <div class="mt-3">
+                <h2>ข้อมูลออเดอร์: {{ order.order_key }}</h2>
+                
+                <div class="grid grid-2 mt-3">
+                    <div>
+                        <p><strong>ลูกค้า:</strong> {{ order.customer_ref or '-' }}</p>
+                        <p><strong>เซิร์ฟเวอร์:</strong> {{ order.server_name or '-' }}</p>
+                        <p><strong>สถานะ:</strong> 
+                            <span class="badge badge-{{ order.status }}">
+                                {{ get_status_th(order.status) }}
+                            </span>
+                        </p>
+                    </div>
+                    <div>
+                        <p><strong>สร้างเมื่อ:</strong> {{ order.created_at.strftime('%d/%m/%Y %H:%M') }}</p>
+                        {% if queue_data %}
+                        <p><strong>คิวที่:</strong> {{ queue_data.position }}</p>
+                        <p><strong>เวลารอโดยประมาณ:</strong> {{ queue_data.eta_display }}</p>
+                        {% endif %}
+                        {% if total_duration_hours and total_duration_hours > 0 %}
+                        <p><strong>เวลาที่คาดว่าจะใช้:</strong> 
+                            {% if total_duration_hours >= 1 %}
+                                {{ "%.1f"|format(total_duration_hours) }} ชั่วโมง
+                            {% else %}
+                                {{ (total_duration_hours * 60)|int }} นาที
+                            {% endif %}
+                        </p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- สรุปความคืบหน้า -->
+                <div class="mt-3" style="background: var(--bg-secondary); padding: 1.5rem; border-radius: 8px;">
+                    <h3>ความคืบหน้า</h3>
+                    <div style="margin-top: 1rem;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                            <span>ฟาร์มได้แล้ว:</span>
+                            <strong>{{ total_current|int }} / {{ total_target|int }}</strong>
+                        </div>
+                        <div class="progress-bar" style="width: 100%; height: 30px; background: var(--bg-tertiary); border-radius: 4px; overflow: hidden;">
+                            {% set progress = (total_current / total_target * 100) if total_target > 0 else 0 %}
+                            <div style="width: {{ progress }}%; height: 100%; background: var(--primary-color); transition: width 0.3s; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">
+                                {{ "%.1f"|format(progress) }}%
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- รายละเอียด Tasks -->
+                {% if tasks %}
+                <div class="mt-3">
+                    <h3>รายละเอียดงาน</h3>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>ประเภท</th>
+                                    <th class="text-right">เป้าหมาย</th>
+                                    <th class="text-right">ฟาร์มได้แล้ว</th>
+                                    <th class="text-center">สถานะ</th>
+                                    <th>คนฟาร์ม</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for task in tasks %}
+                                <tr>
+                                    <td>
+                                        <span class="item-{{ task.item_type }}">
+                                            {{ task.item_type|upper }}
+                                        </span>
+                                    </td>
+                                    <td data-label="เป้าหมาย" class="text-right number">{{ "{:,}".format(task.target_amount|int) }}</td>
+                                    <td data-label="ฟาร์มได้แล้ว" class="text-right">
+                                        <strong>{{ "{:,}".format(task.current_amount|int) }}</strong>
+                                        {% if task.target_amount > 0 %}
+                                            <br><small style="color: var(--text-secondary);">({{ "%.1f"|format((task.current_amount / task.target_amount * 100)) }}%)</small>
+                                        {% endif %}
+                                    </td>
+                                    <td data-label="สถานะ" class="text-center">
+                                        <span class="badge badge-{{ task.status }}">
+                                            {{ get_status_th(task.status) }}
+                                        </span>
+                                    </td>
+                                    <td data-label="คนฟาร์ม">{{ task.farmer.display_name if task.farmer else '-' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="mt-3">
+                    <a href="{{ url_for('track_order') }}" class="btn btn-secondary">ค้นหาออเดอร์อื่น</a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+</div>
+
+<!-- Sidebar Advertisement - แสดงเฉพาะหน้าแรก -->
+<aside class="sidebar-ad featured-ad">
+    <div class="ad-card meemeaw-ad">
+        <div class="ad-badge"><i class="fas fa-star"></i> พิเศษ</div>
+        <div class="ad-header">
+            <img src="https://meemeaw.github.io/MeeMeaw/logo.png" alt="MeeMeaw" class="ad-logo-small">
+            <span class="ad-brand">MeeMeaw</span>
+        </div>
+        <div class="ad-content">
+            <p class="ad-text-main">เว็บนี้พัฒนาโดยทีม MeeMeaw</p>
+            <p class="ad-subtitle">บริการออกแบบเว็บไซต์แบบพร้อมใช้</p>
+            <a href="https://meemeaw.github.io/MeeMeaw/" target="_blank" rel="noopener noreferrer" class="ad-button">
+                🚀 ดูบริการของเรา
+            </a>
+        </div>
+    </div>
+</aside>
+
+<style>
+.progress-bar {
+    position: relative;
+}
+</style>
+{% endblock %}
+

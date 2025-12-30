@@ -1,0 +1,501 @@
+{% extends "base.html" %}
+
+{% block title %}Price & Time Estimator - Termdee Farm{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1><i class="fas fa-calculator"></i> Price & Time Estimator</h1>
+    <p>คำนวณราคาและเวลาฟาร์มโดยประมาณ</p>
+</div>
+
+<div class="estimator-layout">
+    <!-- Form Section -->
+    <div class="estimator-form-wrapper">
+        <form id="estimatorForm" class="estimator-form">
+            <!-- Farm Type Selection -->
+            <div class="form-group">
+                <label class="form-label">
+                    <i class="fas fa-tractor"></i> ประเภทการฟาร์ม
+                </label>
+                <div class="radio-group">
+                    <label class="radio-card">
+                        <input type="radio" name="farm_type" value="drill" checked onchange="updateFarmType()">
+                        <div class="radio-content">
+                            <i class="fas fa-hard-hat"></i>
+                            <span>ฟาร์มเครื่องขุด</span>
+                            <small>มีของแถมตามสัดส่วน</small>
+                        </div>
+                    </label>
+                    <label class="radio-card">
+                        <input type="radio" name="farm_type" value="manual" onchange="updateFarmType()">
+                        <div class="radio-content">
+                            <i class="fas fa-hand-paper"></i>
+                            <span>ฟาร์มมือ</span>
+                            <small>ไม่มีของแถม</small>
+                        </div>
+                    </label>
+                </div>
+                <small style="color: var(--text-secondary); margin-top: 0.5rem; display: block;">
+                    <span id="farm_type_info">ฟาร์มเครื่องขุด: มีของแถมมาตามสัดส่วน (ลด 50%)</span>
+                </small>
+            </div>
+
+            <!-- Drill Farm Items -->
+            <div id="drill_farm_items">
+                <div class="form-group">
+                    <label class="form-label">
+                        <i class="fas fa-cubes"></i> ประเภทของ
+                    </label>
+                    <div class="select-wrapper">
+                        <select name="item_type" id="item_type" class="form-control" onchange="updateItemType()">
+                            <option value="">เลือกประเภท</option>
+                            <option value="stone">Stone</option>
+                            <option value="metal">Metal</option>
+                            <option value="sulfur">Sulfur</option>
+                            <option value="hqm">HQM</option>
+                        </select>
+                        <i class="fas fa-chevron-down select-icon"></i>
+                    </div>
+                    <small style="color: var(--text-secondary); margin-top: 0.5rem; display: block;" id="item_type_info">
+                        ฟาร์มเครื่องขุดรองรับ: Stone, Metal, Sulfur, HQM (ของแถมคำนวณแบบ cascade)
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        <i class="fas fa-sort-numeric-up"></i> จำนวน
+                    </label>
+                    <input type="number" name="amount" id="amount" class="form-control" min="1" placeholder="ระบุจำนวน" oninput="calculateEstimate()">
+                    <small style="color: var(--text-secondary); margin-top: 0.5rem; display: block;" id="amount_info"></small>
+                </div>
+            </div>
+
+            <!-- Manual Farm Items -->
+            <div id="manual_farm_items" style="display: none;">
+                <div class="form-group">
+                    <label class="form-label">
+                        <i class="fas fa-list"></i> รายการของ
+                    </label>
+                    <div id="manualItemsList">
+                        <div class="manual-item-row">
+                            <div class="select-wrapper">
+                                <select name="item_type" class="form-control">
+                                    <option value="">เลือกประเภท</option>
+                                    <option value="wood">Wood</option>
+                                    <option value="stone">Stone</option>
+                                    <option value="sulfur">Sulfur</option>
+                                    <option value="metal">Metal</option>
+                                    <option value="scrap">Scrap</option>
+                                    <option value="hqm">HQM</option>
+                                </select>
+                                <i class="fas fa-chevron-down select-icon"></i>
+                            </div>
+                            <input type="number" name="target_amount" class="form-control" min="1" placeholder="จำนวน">
+                            <button type="button" class="btn-icon btn-remove" onclick="removeManualItem(this)" style="display: none;">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-outline btn-sm" onclick="addManualItem()">
+                        <i class="fas fa-plus"></i> เพิ่มรายการ
+                    </button>
+                    <p class="form-hint">
+                        <i class="fas fa-info-circle"></i> ฟาร์มมือไม่รับออเดอร์เกิน 15,000 ชิ้นต่อรายการ
+                    </p>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="form-actions">
+                <button type="button" class="btn btn-primary btn-lg" onclick="calculateEstimate()">
+                    <i class="fas fa-calculator"></i> คำนวณ
+                </button>
+                <button type="button" class="btn btn-ghost" onclick="resetForm()">
+                    <i class="fas fa-redo"></i> รีเซ็ต
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Results Section -->
+    <div class="estimator-results-wrapper">
+        <div id="results" class="results-card" style="display: none;">
+            <div class="results-header">
+                <h3><i class="fas fa-receipt"></i> ผลการคำนวณ</h3>
+            </div>
+            <div id="results_content" class="results-content"></div>
+        </div>
+
+        <!-- Empty State -->
+        <div id="empty-state" class="empty-state">
+            <div class="empty-state-icon">
+                <i class="fas fa-calculator"></i>
+            </div>
+            <h3>เริ่มต้นประเมินราคา</h3>
+            <p>เลือกประเภทการฟาร์มและระบุจำนวนเพื่อดูผลการคำนวณ</p>
+        </div>
+    </div>
+</div>
+
+<script>
+let settingsData = null;
+
+// โหลด settings เมื่อหน้าเว็บโหลด
+fetch('/api/settings')
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            settingsData = data.settings;
+            updateFarmType();
+        }
+    })
+    .catch(err => {
+        console.error('Error loading settings:', err);
+    });
+
+function updateFarmType() {
+    const farmType = document.querySelector('input[name="farm_type"]:checked').value;
+    const farmTypeInfo = document.getElementById('farm_type_info');
+    const drillFarmItems = document.getElementById('drill_farm_items');
+    const manualFarmItems = document.getElementById('manual_farm_items');
+    const itemTypeSelect = document.getElementById('item_type');
+    const itemTypeInfo = document.getElementById('item_type_info');
+    
+    if (farmType === 'drill') {
+        farmTypeInfo.textContent = 'ฟาร์มเครื่องขุด: มีของแถมมาตามสัดส่วน (ลด ' + (settingsData?.bonus_discount_percent || 50) + '%)';
+        drillFarmItems.style.display = 'block';
+        manualFarmItems.style.display = 'none';
+        if (itemTypeInfo) {
+            itemTypeInfo.innerHTML = '<span style="color: var(--primary-color);">ℹ️ ฟาร์มเครื่องขุดรองรับ: Stone, Metal, Sulfur, HQM (ของแถมคำนวณแบบ cascade)</span>';
+        }
+        // ตั้งค่า stone เป็น default
+        if (itemTypeSelect && (itemTypeSelect.value === '' || !['stone', 'metal', 'sulfur', 'hqm'].includes(itemTypeSelect.value))) {
+            itemTypeSelect.value = 'stone';
+        }
+        updateItemType();
+    } else {
+        farmTypeInfo.textContent = 'ฟาร์มมือ: ไม่มีของแถม (ไม่รับออเดอร์เกิน ' + (settingsData?.manual_farm_max_amount || 15000) + ' ชิ้นต่อรายการ)';
+        drillFarmItems.style.display = 'none';
+        manualFarmItems.style.display = 'block';
+        updateManualAmountInfo();
+    }
+    hideResults();
+}
+
+function updateItemType() {
+    const farmType = document.querySelector('input[name="farm_type"]:checked').value;
+    
+    if (farmType === 'drill') {
+        const itemType = document.getElementById('item_type').value;
+        const amountInfo = document.getElementById('amount_info');
+        if (amountInfo) {
+            amountInfo.textContent = '';
+        }
+        calculateEstimate();
+    }
+}
+
+function addManualItem() {
+    const itemsList = document.getElementById('manualItemsList');
+    const row = document.createElement('div');
+    row.className = 'manual-item-row';
+    
+    row.innerHTML = `
+        <div class="select-wrapper">
+            <select name="item_type" class="form-control">
+                <option value="">เลือกประเภท</option>
+                <option value="wood">Wood</option>
+                <option value="stone">Stone</option>
+                <option value="sulfur">Sulfur</option>
+                <option value="metal">Metal</option>
+                <option value="scrap">Scrap</option>
+                <option value="hqm">HQM</option>
+            </select>
+            <i class="fas fa-chevron-down select-icon"></i>
+        </div>
+        <input type="number" name="target_amount" class="form-control" min="1" placeholder="จำนวน">
+        <button type="button" class="btn-icon btn-remove" onclick="removeManualItem(this)">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    itemsList.appendChild(row);
+    updateManualRemoveButtons();
+}
+
+function removeManualItem(button) {
+    button.closest('.manual-item-row').remove();
+    updateManualRemoveButtons();
+}
+
+function updateManualRemoveButtons() {
+    const rows = document.querySelectorAll('#manualItemsList .manual-item-row');
+    rows.forEach((row, index) => {
+        const removeBtn = row.querySelector('.btn-remove');
+        if (removeBtn) {
+            removeBtn.style.display = rows.length > 1 ? 'flex' : 'none';
+        }
+    });
+}
+
+function updateManualAmountInfo() {
+    const amountInfo = document.getElementById('manual_amount_info');
+    if (amountInfo && settingsData) {
+        const maxAmount = settingsData.manual_farm_max_amount || 15000;
+        amountInfo.textContent = 'ฟาร์มมือไม่รับออเดอร์เกิน ' + maxAmount.toLocaleString() + ' ชิ้นต่อรายการ';
+    }
+}
+
+function resetForm() {
+    document.getElementById('estimatorForm').reset();
+    document.querySelector('input[name="farm_type"][value="drill"]').checked = true;
+    updateFarmType();
+    
+    // Reset drill farm items
+    const itemTypeSelect = document.getElementById('item_type');
+    if (itemTypeSelect) {
+        itemTypeSelect.value = 'stone';
+    }
+    
+    // Reset manual farm items
+    const manualItemsList = document.getElementById('manualItemsList');
+    if (manualItemsList) {
+        manualItemsList.innerHTML = `
+            <div class="manual-item-row">
+                <div class="select-wrapper">
+                    <select name="item_type" class="form-control">
+                        <option value="">เลือกประเภท</option>
+                        <option value="wood">Wood</option>
+                        <option value="stone">Stone</option>
+                        <option value="sulfur">Sulfur</option>
+                        <option value="metal">Metal</option>
+                        <option value="scrap">Scrap</option>
+                        <option value="hqm">HQM</option>
+                    </select>
+                    <i class="fas fa-chevron-down select-icon"></i>
+                </div>
+                <input type="number" name="target_amount" class="form-control" min="1" placeholder="จำนวน">
+                <button type="button" class="btn-icon btn-remove" onclick="removeManualItem(this)" style="display: none;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+    }
+    hideResults();
+}
+
+function hideResults() {
+    document.getElementById('results').style.display = 'none';
+    document.getElementById('empty-state').style.display = 'flex';
+}
+
+function calculateEstimate() {
+    const farmType = document.querySelector('input[name="farm_type"]:checked').value;
+    const discountPercent = 0; // ไม่มีส่วนลดในหน้า estimator
+    
+    let requestData = {
+        farm_type: farmType,
+        discount_percent: discountPercent
+    };
+    
+    if (farmType === 'drill') {
+        // ฟาร์มเครื่องขุด: เลือกประเภทเดียว
+        const itemType = document.getElementById('item_type').value;
+        const amount = parseInt(document.getElementById('amount').value) || 0;
+        
+        if (!itemType || amount <= 0) {
+            document.getElementById('results').style.display = 'none';
+            return;
+        }
+        
+        if (!['stone', 'metal', 'sulfur', 'hqm'].includes(itemType)) {
+            showToast('ฟาร์มเครื่องขุดมีบริการเฉพาะ Stone, Metal, Sulfur, HQM เท่านั้น', 'error');
+            return;
+        }
+        
+        requestData.item_type = itemType;
+        requestData.amount = amount;
+    } else {
+        // ฟาร์มมือ: เลือกหลายประเภท
+        const itemRows = document.querySelectorAll('#manualItemsList .manual-item-row');
+        const items = [];
+        
+        itemRows.forEach(row => {
+            const itemType = row.querySelector('select[name="item_type"]').value;
+            const targetAmount = parseInt(row.querySelector('input[name="target_amount"]').value) || 0;
+            
+            if (itemType && targetAmount > 0) {
+                items.push({
+                    item_type: itemType,
+                    target_amount: targetAmount
+                });
+            }
+        });
+        
+        if (items.length === 0) {
+            showToast('กรุณาเพิ่มอย่างน้อย 1 รายการ', 'error');
+            document.getElementById('results').style.display = 'none';
+            return;
+        }
+        
+        // ตรวจสอบข้อจำกัด: แต่ละรายการไม่เกิน max_amount
+        const maxAmount = settingsData?.manual_farm_max_amount || 15000;
+        for (let item of items) {
+            if (item.target_amount > maxAmount) {
+                showToast('ฟาร์มมือไม่รับออเดอร์เกิน ' + maxAmount.toLocaleString() + ' ชิ้นต่อรายการ', 'error');
+                return;
+            }
+        }
+        
+        requestData.items = items;
+    }
+    
+    // ส่ง request ไป API
+    fetch('/api/estimate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestData)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            displayResults(data.estimate);
+        } else {
+            showToast(data.error || 'เกิดข้อผิดพลาดในการคำนวณ', 'error');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ', 'error');
+    });
+}
+
+function displayResults(estimate) {
+    document.getElementById('empty-state').style.display = 'none';
+    const resultsDiv = document.getElementById('results');
+    const contentDiv = document.getElementById('results_content');
+    
+    let html = '';
+    
+    // แจ้งเตือนถ้ามีการปรับราคา (ป้องกันการโกงราคา)
+    if (estimate.price_optimization) {
+        html += '<div style="background: var(--warning-lighter); padding: 1rem; border-radius: var(--radius); border-left: 4px solid var(--warning-color);">';
+        html += '<p style="margin: 0; color: var(--warning-color); font-weight: bold;">';
+        html += '<i class="fas fa-info-circle"></i> ' + estimate.price_optimization.message;
+        html += '</p>';
+        html += '<small style="color: var(--text-secondary); display: block; margin-top: 0.5rem;">';
+        html += 'คุณเลือก: ' + estimate.price_optimization.original_item_type.toUpperCase() + ' ' + estimate.price_optimization.original_amount.toLocaleString();
+        html += ' → ระบบคำนวณจาก: ' + estimate.price_optimization.optimal_item_type.toUpperCase() + ' ' + estimate.price_optimization.optimal_amount.toLocaleString();
+        html += '</small>';
+        html += '</div>';
+    }
+    
+    // ราคาหลัก
+    if (estimate.items && estimate.items.length > 0) {
+        estimate.items.forEach(item => {
+            html += '<div class="result-item">';
+            html += '<span class="result-label"><i class="fas fa-tag"></i> ' + item.item_type.toUpperCase() + ' ' + item.target_amount.toLocaleString() + '</span>';
+            html += '<span class="result-value">' + item.price.toFixed(2) + ' บาท</span>';
+            html += '</div>';
+        });
+        html += '<div class="result-item">';
+        html += '<span class="result-label"><i class="fas fa-money-bill-wave"></i> ราคาหลักรวม</span>';
+        html += '<span class="result-value">' + estimate.base_price.toFixed(2) + ' บาท</span>';
+        html += '</div>';
+    } else {
+        html += '<div class="result-item">';
+        html += '<span class="result-label"><i class="fas fa-tag"></i> ราคาหลัก</span>';
+        html += '<span class="result-value">' + estimate.base_price.toFixed(2) + ' บาท</span>';
+        html += '</div>';
+        if (estimate.price_optimization) {
+            html += '<div style="padding: 0.5rem; background: var(--warning-light); border-radius: var(--radius); margin-bottom: 0.5rem; font-size: 0.875rem; color: var(--text-secondary);">';
+            html += '<i class="fas fa-info-circle"></i> ' + estimate.price_optimization.message;
+            html += '</div>';
+        }
+    }
+    
+    // ค่าบริการ
+    html += '<div class="result-item">';
+    html += '<span class="result-label"><i class="fas fa-store"></i> ค่าบริการ</span>';
+    html += '<span class="result-value result-secondary">' + estimate.service_fee.toFixed(2) + ' บาท</span>';
+    html += '</div>';
+    
+    // ของแถม (ถ้ามี)
+    if (estimate.bonus_items && Object.keys(estimate.bonus_items).length > 0) {
+        html += '<div class="result-divider"></div>';
+        html += '<div style="margin-bottom: 0.5rem;">';
+        html += '<p style="font-weight: 600; margin-bottom: 0.5rem;"><i class="fas fa-gift"></i> ของแถม (ลด ' + estimate.bonus_discount_percent + '%)</p>';
+        html += '<ul style="margin: 0.5rem 0; padding-left: 1.5rem; font-size: 0.875rem; color: var(--text-secondary);">';
+        if (estimate.bonus_items.stone > 0) {
+            html += '<li>Stone: ' + estimate.bonus_items.stone.toLocaleString() + '</li>';
+        }
+        if (estimate.bonus_items.metal > 0) {
+            html += '<li>Metal: ' + estimate.bonus_items.metal.toLocaleString() + '</li>';
+        }
+        if (estimate.bonus_items.sulfur > 0) {
+            html += '<li>Sulfur: ' + estimate.bonus_items.sulfur.toLocaleString() + '</li>';
+        }
+        if (estimate.bonus_items.hqm > 0) {
+            html += '<li>HQM: ' + estimate.bonus_items.hqm.toLocaleString() + '</li>';
+        }
+        html += '</ul>';
+        html += '<p style="font-weight: 600; color: var(--success-color);">';
+        html += 'ราคาของแถม: ' + estimate.bonus_price.toFixed(2) + ' บาท';
+        html += '</p>';
+        html += '</div>';
+    }
+    
+    // ราคารวม
+    html += '<div class="result-divider"></div>';
+    html += '<div class="result-item result-total">';
+    html += '<span class="result-label"><i class="fas fa-calculator"></i> ราคารวมทั้งหมด</span>';
+    html += '<span class="result-value">' + estimate.total_price.toFixed(2) + ' บาท</span>';
+    html += '</div>';
+    
+    // เวลาฟาร์มโดยประมาณ
+    if (estimate.estimated_hours) {
+        html += '<div class="result-divider"></div>';
+        html += '<div class="result-item">';
+        html += '<span class="result-label"><i class="fas fa-clock"></i> เวลาโดยประมาณ</span>';
+        html += '<span class="result-value result-time">';
+        if (estimate.estimated_hours >= 1) {
+            html += estimate.estimated_hours.toFixed(1) + ' ชั่วโมง';
+        } else {
+            html += Math.round(estimate.estimated_hours * 60) + ' นาที';
+        }
+        html += '</span>';
+        html += '</div>';
+        
+        // ถ้าเป็นฟาร์มมือและมีหลาย items แสดงรายละเอียด
+        if (estimate.items && estimate.items.length > 0) {
+            html += '<div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border-color);">';
+            html += '<p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.25rem;">รายละเอียด:</p>';
+            html += '<ul style="margin: 0; padding-left: 1.25rem; font-size: 0.875rem; color: var(--text-secondary);">';
+            estimate.items.forEach(item => {
+                if (item.hours) {
+                    html += '<li>';
+                    html += item.item_type.toUpperCase() + ': ';
+                    if (item.hours >= 1) {
+                        html += item.hours.toFixed(2) + ' ชม.';
+                    } else {
+                        html += Math.round(item.hours * 60) + ' นาที';
+                    }
+                    html += '</li>';
+                }
+            });
+            html += '</ul>';
+            html += '</div>';
+        }
+    }
+    
+    contentDiv.innerHTML = html;
+    resultsDiv.style.display = 'block';
+    resultsDiv.classList.add('results-animate');
+}
+</script>
+{% endblock %}
+

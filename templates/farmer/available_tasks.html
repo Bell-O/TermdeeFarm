@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}งานที่รับได้ - Termdee Farm{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="card-title">งานที่รับได้</h1>
+        <div class="btn-group">
+            <a href="{{ url_for('farmer_tasks') }}" class="btn btn-secondary">งานของฉัน</a>
+            <button id="toggleRefreshBtn" class="btn btn-warning" onclick="toggleAutoRefresh()">
+                <i class="fas fa-pause"></i> หยุด Auto-Refresh
+            </button>
+        </div>
+    </div>
+
+    {% if available_tasks %}
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Order Key</th>
+                    <th>เซิร์ฟเวอร์</th>
+                    <th>ประเภท</th>
+                    <th class="text-right">เป้าหมาย</th>
+                    <th class="text-center">เวลาที่คาดว่าจะใช้</th>
+                    <th class="text-right">เงินที่จะได้</th>
+                    <th class="text-center">สถานะ</th>
+                    <th class="text-center">จัดการ</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for task in available_tasks %}
+                <tr>
+                    <td data-label="Order Key"><strong>{{ task.order.order_key }}</strong></td>
+                    <td data-label="เซิร์ฟเวอร์">{{ task.server_name or '-' }}</td>
+                    <td data-label="ประเภท"><span class="item-{{ task.item_type }}">{{ task.item_type|upper }}</span></td>
+                    <td data-label="เป้าหมาย" class="text-right number">{{ "{:,}".format(task.target_amount|int) }}</td>
+                    <td data-label="เวลาที่คาดว่าจะใช้" class="text-center">
+                        {% if task.planned_duration_hours %}
+                            {% if task.planned_duration_hours >= 1 %}
+                                {{ "%.1f"|format(task.planned_duration_hours) }} ชั่วโมง
+                            {% else %}
+                                {{ (task.planned_duration_hours * 60)|int }} นาที
+                            {% endif %}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td data-label="เงินที่จะได้" class="text-right">
+                        {% if task.target_amount > 0 %}
+                            {% set settings_data = Settings.get_settings() %}
+                            {% set commission = settings_data.get('commission_percent', 10.0) %}
+                            {% set price_after = Settings.calculate_price(task.item_type, task.target_amount, task.order.discount_percent or 0) %}
+                            <span style="color: var(--success-color); font-weight: bold; font-size: 1.1rem;">
+                                {{ "{:,.2f}".format(price_after) }} บาท
+                            </span>
+                            <br><small style="color: var(--text-secondary);">หักค่าคนกลาง {{ commission }}%</small>
+                            {% if task.order.discount_percent and task.order.discount_percent > 0 %}
+                                <br><small style="color: var(--text-secondary);">ส่วนลด {{ task.order.discount_percent }}%</small>
+                            {% endif %}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td data-label="สถานะ" class="text-center"><span class="badge badge-{{ task.status }}">{{ get_status_th(task.status) }}</span></td>
+                    <td data-label="จัดการ" class="text-center">
+                        <div class="btn-group" style="gap: 0.25rem;">
+                            <button class="btn btn-sm btn-success" onclick="acceptAvailableTask({{ task.id }})">รับงาน</button>
+                            <a href="{{ url_for('farmer_task_detail', task_id=task.id) }}" class="btn btn-sm btn-secondary">ดูรายละเอียด</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-center">ไม่มีงานที่รับได้ในขณะนี้</p>
+    {% endif %}
+</div>
+
+<script>
+// Auto-refresh ทุก 60 วินาที (1 นาที)
+let refreshInterval = null;
+let autoRefreshEnabled = localStorage.getItem('autoRefresh') !== 'false';
+
+function startAutoRefresh() {
+    if (refreshInterval) clearInterval(refreshInterval);
+    if (autoRefreshEnabled) {
+        refreshInterval = setInterval(() => {
+            location.reload();
+        }, 60000); // 60 วินาที
+    }
+}
+
+function toggleAutoRefresh() {
+    autoRefreshEnabled = !autoRefreshEnabled;
+    localStorage.setItem('autoRefresh', autoRefreshEnabled);
+    startAutoRefresh();
+    const btn = document.getElementById('toggleRefreshBtn');
+    if (btn) {
+        btn.innerHTML = autoRefreshEnabled 
+            ? '<i class="fas fa-pause"></i> หยุด Auto-Refresh' 
+            : '<i class="fas fa-play"></i> เปิด Auto-Refresh';
+        btn.className = autoRefreshEnabled ? 'btn btn-warning' : 'btn btn-success';
+    }
+}
+
+startAutoRefresh();
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function acceptAvailableTask(taskId) {
+    if (!confirm('คุณต้องการรับงานนี้หรือไม่?')) {
+        return;
+    }
+    
+    const csrfToken = getCsrfToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+    
+    fetch(`/api/farmer/task/${taskId}/self-assign`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({ csrf_token: csrfToken })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('รับงานสำเร็จ!');
+            location.reload();
+        } else {
+            alert(data.error || 'เกิดข้อผิดพลาด');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('เกิดข้อผิดพลาดในการรับงาน');
+    });
+}
+</script>
+{% endblock %}
+

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}งานของฉัน - Termdee Farm{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="card-title">งานของฉัน</h1>
+        <button id="toggleRefreshBtn" class="btn btn-warning" onclick="toggleAutoRefresh()">
+            <i class="fas fa-pause"></i> หยุด Auto-Refresh
+        </button>
+    </div>
+
+    {% if tasks %}
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Order Key</th>
+                    <th>เซิร์ฟเวอร์</th>
+                    <th>ประเภท</th>
+                    <th class="text-right">เป้าหมาย</th>
+                    <th class="text-right">ปัจจุบัน</th>
+                    <th class="text-center">ความคืบหน้า</th>
+                    <th class="text-center">สถานะ</th>
+                    <th class="text-center">จัดการ</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for task in tasks %}
+                <tr>
+                    <td data-label="Order Key"><strong>{{ task.order.order_key }}</strong></td>
+                    <td data-label="เซิร์ฟเวอร์">{{ task.server_name or '-' }}</td>
+                    <td data-label="ประเภท"><span class="item-{{ task.item_type }}">{{ task.item_type|upper }}</span></td>
+                    <td data-label="เป้าหมาย" class="text-right number">{{ "{:,}".format(task.target_amount|int) }}</td>
+                    <td data-label="ปัจจุบัน" class="text-right number"><strong>{{ "{:,}".format(task.current_amount|int) }}</strong></td>
+                    <td data-label="ความคืบหน้า" class="text-center">
+                        <div class="progress" style="width: 150px; margin: 0 auto;">
+                            <div class="progress-bar" style="width: {{ (task.current_amount / task.target_amount * 100) if task.target_amount > 0 else 0 }}%">
+                                {{ ((task.current_amount / task.target_amount * 100) if task.target_amount > 0 else 0)|int }}%
+                            </div>
+                        </div>
+                    </td>
+                    <td data-label="สถานะ" class="text-center"><span class="badge badge-{{ task.status }}">{{ get_status_th(task.status) }}</span></td>
+                    <td data-label="จัดการ" class="text-center">
+                        <a href="{{ url_for('farmer_task_detail', task_id=task.id) }}" class="btn btn-sm btn-primary">ดูรายละเอียด</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Pagination -->
+    {% if pagination and pagination.pages > 1 %}
+    <div class="pagination" style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 2rem;">
+        {% if pagination.has_prev %}
+            <a href="{{ url_for('farmer_tasks', page=pagination.prev_num) }}" class="btn btn-sm btn-secondary">
+                <i class="fas fa-chevron-left"></i> ก่อนหน้า
+            </a>
+        {% endif %}
+        
+        <span style="padding: 0.5rem 1rem;">
+            หน้า {{ pagination.page }} จาก {{ pagination.pages }} 
+            (ทั้งหมด {{ pagination.total }} รายการ)
+        </span>
+        
+        {% if pagination.has_next %}
+            <a href="{{ url_for('farmer_tasks', page=pagination.next_num) }}" class="btn btn-sm btn-secondary">
+                ถัดไป <i class="fas fa-chevron-right"></i>
+            </a>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% else %}
+    <p class="text-center">ยังไม่มีงานที่ได้รับมอบหมาย</p>
+    {% endif %}
+</div>
+
+<script>
+// Auto-refresh ทุก 60 วินาที (1 นาที)
+let refreshInterval = null;
+let autoRefreshEnabled = localStorage.getItem('autoRefresh') !== 'false';
+
+function startAutoRefresh() {
+    if (refreshInterval) clearInterval(refreshInterval);
+    if (autoRefreshEnabled) {
+        refreshInterval = setInterval(() => {
+            location.reload();
+        }, 60000); // 60 วินาที
+    }
+}
+
+function toggleAutoRefresh() {
+    autoRefreshEnabled = !autoRefreshEnabled;
+    localStorage.setItem('autoRefresh', autoRefreshEnabled);
+    startAutoRefresh();
+    const btn = document.getElementById('toggleRefreshBtn');
+    if (btn) {
+        btn.innerHTML = autoRefreshEnabled 
+            ? '<i class="fas fa-pause"></i> หยุด Auto-Refresh' 
+            : '<i class="fas fa-play"></i> เปิด Auto-Refresh';
+        btn.className = autoRefreshEnabled ? 'btn btn-warning' : 'btn btn-success';
+    }
+}
+
+startAutoRefresh();
+</script>
+{% endblock %}
+

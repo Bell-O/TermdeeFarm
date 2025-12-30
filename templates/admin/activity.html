@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}กิจกรรมผู้ใช้ - Termdee Farm{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="card-title">กิจกรรมผู้ใช้</h1>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">กลับ</a>
+    </div>
+
+    {% if user_activities %}
+    {% for user_id, data in user_activities.items() %}
+    <div class="card mt-3">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <h3>
+                {% if data.user %}
+                    {{ data.user.display_name or data.user.username }}
+                    <span class="badge badge-{{ 'danger' if data.user.role == 'super_admin' else 'primary' if data.user.role == 'admin' else 'success' }}" id="role_badge_{{ user_id }}">
+                        {% if data.user.role == 'super_admin' %}แอดมินหลัก
+                        {% elif data.user.role == 'admin' %}แอดมิน
+                        {% else %}คนฟาร์ม{% endif %}
+                    </span>
+                {% else %}
+                    ผู้ใช้ ID: {{ user_id }}
+                {% endif %}
+            </h3>
+            {% if current_user.role == 'super_admin' and data.user and data.user.id != current_user.id %}
+            <button class="btn btn-sm btn-warning" onclick="showChangeRoleModal({{ user_id }}, {{ data.user.username|tojson }}, {{ data.user.role|tojson }})">
+                <i class="fas fa-user-shield"></i> ขึ้นยศ
+            </button>
+            {% endif %}
+        </div>
+        <div class="mt-2">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>เวลา</th>
+                            <th class="text-center">การกระทำ</th>
+                            <th>รายละเอียด</th>
+                            <th class="text-center">Order/Task</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in data.activities[:20] %}
+                        <tr>
+                            <td data-label="เวลา">{{ log.created_at.strftime('%d/%m/%Y %H:%M:%S') }}</td>
+                            <td data-label="การกระทำ" class="text-center"><span class="badge badge-primary">{{ log.action }}</span></td>
+                            <td data-label="รายละเอียด">{{ log.message }}</td>
+                            <td data-label="Order/Task" class="text-center">
+                                {% if log.order_id %}
+                                    <a href="{{ url_for('admin_order_detail', order_id=log.order_id) }}">Order #{{ log.order_id }}</a>
+                                {% endif %}
+                                {% if log.task_id %}
+                                    Task #{{ log.task_id }}
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if data.activities|length > 20 %}
+            <p class="text-center mt-2">
+                <small>แสดง 20 รายการล่าสุด จากทั้งหมด {{ data.activities|length }} รายการ</small>
+            </p>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="text-center">ยังไม่มีกิจกรรม</p>
+    {% endif %}
+</div>
+
+<!-- Change Role Modal -->
+{% if current_user.role == 'super_admin' %}
+<div id="changeRoleModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 400px; margin: 2rem;">
+        <div class="card-header">
+            <h2>ขึ้นยศผู้ใช้</h2>
+            <button onclick="hideChangeRoleModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+        </div>
+        <div style="padding: 1.5rem;">
+            <div class="form-group">
+                <label class="form-label">ผู้ใช้</label>
+                <input type="text" id="change_role_username" class="form-control" readonly>
+            </div>
+            <div class="form-group">
+                <label class="form-label">ยศใหม่ *</label>
+                <select id="change_role_new_role" class="form-control" required>
+                    <option value="farmer">คนฟาร์ม</option>
+                    <option value="admin">แอดมิน</option>
+                    <option value="super_admin">แอดมินหลัก</option>
+                </select>
+            </div>
+            <div class="btn-group" style="margin-top: 1rem;">
+                <button class="btn btn-primary" onclick="updateUserRole()">บันทึก</button>
+                <button class="btn btn-secondary" onclick="hideChangeRoleModal()">ยกเลิก</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentChangingUserId = null;
+
+function showChangeRoleModal(userId, username, currentRole) {
+    currentChangingUserId = userId;
+    document.getElementById('change_role_username').value = username;
+    document.getElementById('change_role_new_role').value = currentRole;
+    document.getElementById('changeRoleModal').style.display = 'flex';
+}
+
+function hideChangeRoleModal() {
+    document.getElementById('changeRoleModal').style.display = 'none';
+    currentChangingUserId = null;
+}
+
+function updateUserRole() {
+    if (!currentChangingUserId) {
+        showToast('เกิดข้อผิดพลาด', 'error');
+        return;
+    }
+    
+    const newRole = document.getElementById('change_role_new_role').value;
+    
+    showConfirmModal('ต้องการเปลี่ยนยศผู้ใช้หรือไม่?', () => {
+        const csrfToken = getCsrfToken();
+        const headers = { 'Content-Type': 'application/json' };
+        if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+        
+        fetch(`/api/admin/user/${currentChangingUserId}/role`, {
+            method: 'PATCH',
+            headers: headers,
+            body: JSON.stringify({ role: newRole, csrf_token: csrfToken })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast(`เปลี่ยนยศเป็น ${data.role_display} สำเร็จ!`, 'success');
+                hideChangeRoleModal();
+                
+                // อัปเดต badge
+                const badge = document.getElementById(`role_badge_${currentChangingUserId}`);
+                if (badge) {
+                    badge.textContent = data.role_display;
+                    badge.className = 'badge badge-' + (
+                        newRole === 'super_admin' ? 'danger' : 
+                        newRole === 'admin' ? 'primary' : 'success'
+                    );
+                }
+                
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast(data.error || 'เกิดข้อผิดพลาด', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ', 'error');
+        });
+    });
+}
+</script>
+{% endblock %}
+
+
+

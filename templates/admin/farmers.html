@@ -1,0 +1,757 @@
+{% extends "base.html" %}
+
+{% block title %}จัดการผู้ใช้ - Termdee Farm{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="card-title">จัดการผู้ใช้</h1>
+        <div class="btn-group">
+            <a href="{{ url_for('admin_settings') }}" class="btn btn-secondary">ตั้งค่าระบบ</a>
+            <button class="btn btn-primary" onclick="showCreateFarmerModal()">
+                <i class="fas fa-user-plus"></i> เพิ่มคนฟาร์ม
+            </button>
+            {% if current_user_role == 'super_admin' %}
+            <button class="btn btn-success" onclick="showCreateAdminModal()">
+                <i class="fas fa-user-shield"></i> เพิ่มแอดมิน
+            </button>
+            {% endif %}
+            <button class="btn btn-info" onclick="exportFarmers()">
+                <i class="fas fa-download"></i> Export CSV
+            </button>
+        </div>
+    </div>
+
+    <!-- Search & Filter -->
+    <div class="card mt-3" style="background: var(--bg-secondary);">
+        <form method="GET" action="{{ url_for('admin_farmers') }}" id="filterForm">
+            <div class="grid grid-4" style="gap: 1rem;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">ค้นหา</label>
+                    <input type="text" name="search" class="form-control" 
+                           placeholder="ชื่อผู้ใช้, ชื่อแสดง, ชื่อจริง" 
+                           value="{{ search }}">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">ประเภท</label>
+                    <select name="role" class="form-control">
+                        <option value="">ทั้งหมด</option>
+                        <option value="farmer" {% if role_filter == 'farmer' %}selected{% endif %}>คนฟาร์ม</option>
+                        <option value="admin" {% if role_filter == 'admin' %}selected{% endif %}>แอดมิน</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">สถานะ</label>
+                    <select name="active" class="form-control">
+                        <option value="">ทั้งหมด</option>
+                        <option value="true" {% if active_filter == 'true' %}selected{% endif %}>ใช้งาน</option>
+                        <option value="false" {% if active_filter == 'false' %}selected{% endif %}>ปิดใช้งาน</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 0; display: flex; align-items: flex-end;">
+                    <div class="btn-group" style="width: 100%;">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-search"></i> ค้นหา
+                        </button>
+                        <a href="{{ url_for('admin_farmers') }}" class="btn btn-secondary">
+                            <i class="fas fa-redo"></i> รีเซ็ต
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    {% if admins|length > 0 and current_user_role == 'super_admin' %}
+    <div class="card mt-3">
+        <div class="card-header">
+            <h2 class="card-title">จัดการแอดมิน</h2>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th class="text-center number">ID</th>
+                        <th>ชื่อผู้ใช้</th>
+                        <th>ชื่อแสดง</th>
+                        <th class="text-center">Role</th>
+                        <th class="text-center">สถานะ</th>
+                        <th class="text-center">สร้างเมื่อ</th>
+                        <th class="text-center">จัดการ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for admin in admins %}
+                    <tr>
+                        <td data-label="ID" class="text-center number">{{ admin.id }}</td>
+                        <td data-label="ชื่อผู้ใช้">{{ admin.username }}</td>
+                        <td data-label="ชื่อแสดง">{{ admin.display_name or admin.username }}</td>
+                        <td data-label="Role" class="text-center">
+                            {% if admin.role == 'super_admin' %}
+                                <span class="badge badge-danger">แอดมินหลัก</span>
+                            {% else %}
+                                <span class="badge badge-primary">แอดมิน</span>
+                            {% endif %}
+                        </td>
+                        <td data-label="สถานะ" class="text-center">
+                            {% if admin.active %}
+                            <span class="badge badge-success">ใช้งาน</span>
+                            {% else %}
+                            <span class="badge badge-canceled">ปิดใช้งาน</span>
+                            {% endif %}
+                        </td>
+                        <td data-label="สร้างเมื่อ" class="text-center">{{ admin.created_at.strftime('%d/%m/%Y') if admin.created_at else '-' }}</td>
+                        <td data-label="จัดการ" class="text-center">
+                            <div class="btn-group" style="flex-direction: column; gap: 0.25rem;">
+                                {% if admin.role != 'super_admin' or current_user_role == 'super_admin' %}
+                                    {% if admin.id != current_user.id %}
+                                        <button class="btn btn-sm btn-primary" onclick="showEditAdminModal({{ admin.id }})">แก้ไข</button>
+                                        {% if admin.active %}
+                                        <button class="btn btn-sm btn-danger" onclick="disableAdmin({{ admin.id }})">ปิดใช้งาน</button>
+                                        {% else %}
+                                        <button class="btn btn-sm btn-success" onclick="enableAdmin({{ admin.id }})">เปิดใช้งาน</button>
+                                        {% endif %}
+                                        <button class="btn btn-sm btn-danger" onclick="deleteAdmin({{ admin.id }}, '{{ admin.username }}')" style="background-color: #dc2626;">ลบ</button>
+                                    {% else %}
+                                        <span class="text-muted">บัญชีของคุณ</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">ไม่มีสิทธิ์จัดการ</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if farmers|length > 0 %}
+    <div class="card mt-3">
+        <div class="card-header">
+            <h2 class="card-title">จัดการคนฟาร์ม</h2>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+            <thead>
+                <tr>
+                    <th class="text-center number">ID</th>
+                    <th>ชื่อผู้ใช้</th>
+                    <th>ชื่อแสดง</th>
+                    <th>ชื่อจริง</th>
+                    <th>ยศ</th>
+                    <th class="text-center">สถานะ</th>
+                    <th class="text-center">สถิติ</th>
+                    <th class="text-center">สร้างเมื่อ</th>
+                    <th class="text-center">จัดการ</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for farmer in farmers %}
+                <tr>
+                    <td data-label="ID" class="text-center number">{{ farmer.id }}</td>
+                    <td data-label="ชื่อผู้ใช้">{{ farmer.username }}</td>
+                    <td data-label="ชื่อแสดง">{{ farmer.display_name or farmer.username }}</td>
+                    <td data-label="ชื่อจริง">{{ farmer.real_name or '-' }}</td>
+                    <td data-label="ยศ">
+                        {% if farmer.user_title %}
+                            <span class="badge badge-primary">{{ farmer.user_title }}</span>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td data-label="สถานะ" class="text-center">
+                        {% if farmer.active %}
+                        <span class="badge badge-success">ใช้งาน</span>
+                        {% else %}
+                        <span class="badge badge-canceled">ปิดใช้งาน</span>
+                        {% endif %}
+                    </td>
+                    <td data-label="สถิติ" class="text-center">
+                        {% set stats = farmer_stats.get(farmer.id, {}) %}
+                        <small>
+                            ทั้งหมด: {{ stats.get('total_tasks', 0) }}<br>
+                            เสร็จแล้ว: {{ stats.get('completed_tasks', 0) }}<br>
+                            กำลังทำ: <strong>{{ stats.get('active_tasks', 0) }}</strong>
+                        </small>
+                    </td>
+                    <td data-label="สร้างเมื่อ" class="text-center">{{ farmer.created_at.strftime('%d/%m/%Y') if farmer.created_at else '-' }}</td>
+                    <td data-label="จัดการ" class="text-center">
+                    <div class="btn-group" style="flex-direction: column; gap: 0.25rem;">
+                        <button class="btn btn-sm btn-primary" onclick="showEditFarmerModal({{ farmer.id }})">แก้ไข</button>
+                        <button class="btn btn-sm btn-info" onclick="viewPerformance({{ farmer.id }})">
+                            <i class="fas fa-chart-line"></i> ประสิทธิภาพ
+                        </button>
+                        <button class="btn btn-sm btn-warning" onclick="showResetPasswordModal({{ farmer.id }}, '{{ farmer.username }}')">เปลี่ยนรหัสผ่าน</button>
+                        {% if farmer.active %}
+                        <button class="btn btn-sm btn-danger" onclick="disableFarmer({{ farmer.id }})">ปิดใช้งาน</button>
+                        {% else %}
+                        <button class="btn btn-sm btn-success" onclick="enableFarmer({{ farmer.id }})">เปิดใช้งาน</button>
+                        {% endif %}
+                        <button class="btn btn-sm btn-danger" onclick="deleteFarmer({{ farmer.id }}, '{{ farmer.username }}')" style="background-color: #dc2626;">ลบ</button>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+        </div>
+    {% else %}
+    <p class="text-center">ยังไม่มีคนฟาร์ม</p>
+    {% endif %}
+    </div>
+</div>
+
+<!-- Create Farmer Modal -->
+<div id="createFarmerModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 400px; margin: 2rem;">
+        <div class="card-header">
+            <h2>เพิ่มคนฟาร์ม</h2>
+            <button onclick="hideCreateFarmerModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+        </div>
+        <form id="createFarmerForm" onsubmit="createFarmer(event)">
+            <div class="form-group">
+                <label class="form-label">ชื่อผู้ใช้ *</label>
+                <input type="text" name="username" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">รหัสผ่าน *</label>
+                <input type="password" name="password" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">ชื่อแสดง (ไม่บังคับ)</label>
+                <input type="text" name="display_name" class="form-control">
+            </div>
+            <div class="form-group">
+                <label class="form-label">ชื่อจริง *</label>
+                <input type="text" name="real_name" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">ชื่อธนาคาร *</label>
+                <input type="text" name="bank_name" class="form-control" required placeholder="เช่น กสิกรไทย, กรุงเทพ">
+            </div>
+            <div class="form-group">
+                <label class="form-label">บัญชีธนาคาร *</label>
+                <input type="text" name="bank_account" class="form-control" required placeholder="เลขบัญชี">
+            </div>
+            <div class="form-group">
+                <label class="form-label">ยศผู้ใช้ (ไม่บังคับ)</label>
+                <input type="text" name="user_title" class="form-control" placeholder="เช่น Senior Farmer, Junior Farmer">
+            </div>
+            <div class="btn-group">
+                <button type="submit" class="btn btn-primary">สร้างบัญชี</button>
+                <button type="button" class="btn btn-secondary" onclick="hideCreateFarmerModal()">ยกเลิก</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Farmer Modal -->
+<div id="editFarmerModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 400px; margin: 2rem;">
+        <div class="card-header">
+            <h2>แก้ไขข้อมูลคนฟาร์ม</h2>
+            <button onclick="hideEditFarmerModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+        </div>
+        <form id="editFarmerForm" onsubmit="updateFarmer(event)">
+            <input type="hidden" id="edit_farmer_id" name="farmer_id">
+            <div class="form-group">
+                <label class="form-label">ชื่อแสดง</label>
+                <input type="text" name="display_name" class="form-control" id="edit_display_name">
+            </div>
+            <div class="form-group">
+                <label class="form-label">ชื่อจริง</label>
+                <input type="text" name="real_name" class="form-control" id="edit_real_name">
+            </div>
+            <div class="form-group">
+                <label class="form-label">ชื่อธนาคาร</label>
+                <input type="text" name="bank_name" class="form-control" id="edit_bank_name">
+            </div>
+            <div class="form-group">
+                <label class="form-label">บัญชีธนาคาร</label>
+                <input type="text" name="bank_account" class="form-control" id="edit_bank_account">
+            </div>
+            <div class="form-group">
+                <label class="form-label">ยศผู้ใช้</label>
+                <input type="text" name="user_title" class="form-control" id="edit_user_title" placeholder="เช่น Senior Farmer, Junior Farmer">
+            </div>
+            <div class="btn-group">
+                <button type="submit" class="btn btn-primary">บันทึก</button>
+                <button type="button" class="btn btn-secondary" onclick="hideEditFarmerModal()">ยกเลิก</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Create Admin Modal -->
+<div id="createAdminModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 400px; margin: 2rem;">
+        <div class="card-header">
+            <h2>เพิ่มแอดมิน</h2>
+            <button onclick="hideCreateAdminModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+        </div>
+        <form id="createAdminForm" onsubmit="createAdmin(event)">
+            <div class="form-group">
+                <label class="form-label">ชื่อผู้ใช้ *</label>
+                <input type="text" name="username" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">รหัสผ่าน *</label>
+                <input type="password" name="password" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">ชื่อแสดง (ไม่บังคับ)</label>
+                <input type="text" name="display_name" class="form-control">
+            </div>
+            {% if current_user_role == 'super_admin' %}
+            <div class="form-group">
+                <label class="form-label">Role</label>
+                <select name="role" class="form-control">
+                    <option value="admin">แอดมิน</option>
+                    <option value="super_admin">แอดมินหลัก</option>
+                </select>
+            </div>
+            {% else %}
+            <input type="hidden" name="role" value="admin">
+            {% endif %}
+            <div class="btn-group">
+                <button type="submit" class="btn btn-primary">สร้างบัญชี</button>
+                <button type="button" class="btn btn-secondary" onclick="hideCreateAdminModal()">ยกเลิก</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Admin Modal -->
+<div id="editAdminModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 400px; margin: 2rem;">
+        <div class="card-header">
+            <h2>แก้ไขข้อมูลแอดมิน</h2>
+            <button onclick="hideEditAdminModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+        </div>
+        <form id="editAdminForm" onsubmit="updateAdmin(event)">
+            <input type="hidden" id="edit_admin_id" name="admin_id">
+            <div class="form-group">
+                <label class="form-label">ชื่อผู้ใช้</label>
+                <input type="text" id="edit_admin_username" class="form-control" disabled>
+            </div>
+            <div class="form-group">
+                <label class="form-label">ชื่อแสดง</label>
+                <input type="text" name="display_name" class="form-control" id="edit_admin_display_name">
+            </div>
+            {% if current_user_role == 'super_admin' %}
+            <div class="form-group">
+                <label class="form-label">Role</label>
+                <select name="role" class="form-control" id="edit_admin_role">
+                    <option value="admin">แอดมิน</option>
+                    <option value="super_admin">แอดมินหลัก</option>
+                </select>
+            </div>
+            {% endif %}
+            <div class="form-group">
+                <label class="form-label">
+                    <input type="checkbox" name="active" id="edit_admin_active"> เปิดใช้งาน
+                </label>
+            </div>
+            <div class="btn-group">
+                <button type="submit" class="btn btn-primary">บันทึก</button>
+                <button type="button" class="btn btn-secondary" onclick="hideEditAdminModal()">ยกเลิก</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function showCreateFarmerModal() {
+    document.getElementById('createFarmerModal').style.display = 'flex';
+}
+
+function hideCreateFarmerModal() {
+    document.getElementById('createFarmerModal').style.display = 'none';
+}
+
+function createFarmer(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData);
+
+    const csrfToken = getCsrfToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+    data.csrf_token = csrfToken;
+    
+    fetch('/api/admin/farmer', {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showToast('สร้างบัญชีคนฟาร์มสำเร็จ!', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(data.error || 'เกิดข้อผิดพลาด', 'error');
+        }
+    });
+}
+
+function disableFarmer(farmerId) {
+    showConfirmModal('ต้องการปิดใช้งานคนฟาร์มนี้หรือไม่?', () => {
+        const csrfToken = getCsrfToken();
+        const headers = { 'Content-Type': 'application/json' };
+        if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+        
+        fetch(`/api/admin/farmer/${farmerId}/toggle`, { 
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ csrf_token: csrfToken })
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('อัพเดตสถานะสำเร็จ', 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showToast(data.error || 'เกิดข้อผิดพลาด', 'error');
+                }
+            });
+    });
+}
+
+function exportFarmers() {
+    window.location.href = '/api/admin/export/farmers';
+}
+
+function viewPerformance(farmerId) {
+    fetch(`/api/admin/farmer/${farmerId}/performance`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast(
+                    `สถิติประสิทธิภาพ: ${data.farmer_name}\n` +
+                    `จำนวนงานที่เสร็จ: ${data.total_tasks}\n` +
+                    `จำนวนรวม: ${data.total_amount.toLocaleString()}\n` +
+                    `ความเร็วเฉลี่ย: ${data.avg_speed} items/hour\n` +
+                    `อัตราการเสร็จตรงเวลา: ${data.on_time_rate}%`,
+                    'info',
+                    8000
+                );
+            } else {
+                showToast(data.error || 'เกิดข้อผิดพลาด', 'error');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showToast('เกิดข้อผิดพลาด', 'error');
+        });
+}
+
+function deleteFarmer(farmerId, username) {
+    showConfirmModal(
+        `คุณแน่ใจหรือไม่ว่าต้องการลบบัญชี "${username}"?\n\nการลบนี้จะลบ:\n- บัญชีผู้ใช้\n- งานทั้งหมดที่เกี่ยวข้อง\n- ประวัติการทำงาน\n\n⚠️ การกระทำนี้ไม่สามารถยกเลิกได้!`,
+        () => {
+            const csrfToken = getCsrfToken();
+            const headers = { 'Content-Type': 'application/json' };
+            if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+            
+            fetch(`/api/admin/farmer/${farmerId}`, {
+                method: 'DELETE',
+                headers: headers,
+                body: JSON.stringify({ csrf_token: csrfToken })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('ลบบัญชีสำเร็จ', 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showToast(data.error || 'เกิดข้อผิดพลาด', 'error');
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                showToast('เกิดข้อผิดพลาดในการลบบัญชี', 'error');
+            });
+        }
+    );
+}
+
+function enableFarmer(farmerId) {
+    showConfirmModal('ต้องการเปิดใช้งานคนฟาร์มนี้หรือไม่?', () => {
+        const csrfToken = getCsrfToken();
+        const headers = { 'Content-Type': 'application/json' };
+        if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+        
+        fetch(`/api/admin/farmer/${farmerId}/toggle`, { 
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ csrf_token: csrfToken })
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('อัพเดตสถานะสำเร็จ', 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showToast(data.error || 'เกิดข้อผิดพลาด', 'error');
+                }
+            });
+    });
+}
+
+function showEditFarmerModal(farmerId) {
+    // ดึงข้อมูลคนฟาร์มก่อน
+    fetch(`/api/admin/farmer/${farmerId}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                const farmer = data.farmer;
+                document.getElementById('edit_farmer_id').value = farmerId;
+                document.getElementById('edit_display_name').value = farmer.display_name || '';
+                document.getElementById('edit_real_name').value = farmer.real_name || '';
+                document.getElementById('edit_bank_name').value = farmer.bank_name || '';
+                document.getElementById('edit_bank_account').value = farmer.bank_account || '';
+                document.getElementById('edit_user_title').value = farmer.user_title || '';
+                document.getElementById('editFarmerModal').style.display = 'flex';
+            } else {
+                showToast(data.error || 'ไม่พบข้อมูลคนฟาร์ม', 'error');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showToast('เกิดข้อผิดพลาดในการดึงข้อมูล', 'error');
+        });
+}
+
+function hideEditFarmerModal() {
+    document.getElementById('editFarmerModal').style.display = 'none';
+}
+
+function updateFarmer(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    const farmerId = formData.get('farmer_id');
+    const data = {
+        display_name: formData.get('display_name'),
+        real_name: formData.get('real_name'),
+        bank_name: formData.get('bank_name'),
+        bank_account: formData.get('bank_account'),
+        user_title: formData.get('user_title')
+    };
+
+    const csrfToken = getCsrfToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+    data.csrf_token = csrfToken;
+    
+    fetch(`/api/admin/farmer/${farmerId}`, {
+        method: 'PATCH',
+        headers: headers,
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('บันทึกข้อมูลสำเร็จ!');
+            location.reload();
+        } else {
+            alert(data.error || 'เกิดข้อผิดพลาด');
+        }
+    });
+}
+
+function showCreateAdminModal() {
+    document.getElementById('createAdminModal').style.display = 'flex';
+}
+
+function hideCreateAdminModal() {
+    document.getElementById('createAdminModal').style.display = 'none';
+}
+
+function createAdmin(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    const role = formData.get('role');
+    const data = {
+        username: formData.get('username'),
+        password: formData.get('password'),
+        display_name: formData.get('display_name'),
+        role: role || 'admin'
+    };
+
+    const csrfToken = getCsrfToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+    data.csrf_token = csrfToken;
+    
+    fetch('/api/admin/admin', {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showToast('สร้างบัญชีแอดมินสำเร็จ!', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(data.error || 'เกิดข้อผิดพลาด', 'error');
+        }
+    });
+}
+
+function showEditAdminModal(adminId) {
+    fetch(`/api/admin/admin/${adminId}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                const admin = data.admin;
+                document.getElementById('edit_admin_id').value = admin.id;
+                document.getElementById('edit_admin_username').value = admin.username;
+                document.getElementById('edit_admin_display_name').value = admin.display_name || '';
+                document.getElementById('edit_admin_role').value = admin.role;
+                document.getElementById('edit_admin_active').checked = admin.active;
+                document.getElementById('editAdminModal').style.display = 'flex';
+            } else {
+                showToast(data.error || 'เกิดข้อผิดพลาด', 'error');
+            }
+        });
+}
+
+function hideEditAdminModal() {
+    document.getElementById('editAdminModal').style.display = 'none';
+}
+
+function updateAdmin(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    const adminId = formData.get('admin_id');
+    const data = {
+        display_name: formData.get('display_name'),
+        role: formData.get('role'),
+        active: formData.get('active') === 'on'
+    };
+
+    const csrfToken = getCsrfToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+    data.csrf_token = csrfToken;
+    
+    fetch(`/api/admin/admin/${adminId}`, {
+        method: 'PATCH',
+        headers: headers,
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('บันทึกข้อมูลสำเร็จ!');
+            location.reload();
+        } else {
+            alert(data.error || 'เกิดข้อผิดพลาด');
+        }
+    });
+}
+
+function deleteAdmin(adminId, username) {
+    showConfirmModal(
+        `คุณแน่ใจหรือไม่ว่าต้องการลบบัญชีแอดมิน "${username}"?\n\n⚠️ การกระทำนี้ไม่สามารถยกเลิกได้!`,
+        () => {
+            const csrfToken = getCsrfToken();
+            const headers = { 'Content-Type': 'application/json' };
+            if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+            
+            fetch(`/api/admin/admin/${adminId}`, {
+                method: 'DELETE',
+                headers: headers,
+                body: JSON.stringify({ csrf_token: csrfToken })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('ลบบัญชีแอดมินสำเร็จ!', 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showToast(data.error || 'เกิดข้อผิดพลาด', 'error');
+                }
+            });
+        }
+    );
+}
+
+function disableAdmin(adminId) {
+    if (!confirm('คุณต้องการปิดใช้งานบัญชีแอดมินนี้หรือไม่?')) {
+        return;
+    }
+    
+    fetch(`/api/admin/admin/${adminId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: false })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('ปิดใช้งานสำเร็จ!');
+            location.reload();
+        } else {
+            alert(data.error || 'เกิดข้อผิดพลาด');
+        }
+    });
+}
+
+function enableAdmin(adminId) {
+    fetch(`/api/admin/admin/${adminId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: true })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('เปิดใช้งานสำเร็จ!');
+            location.reload();
+        } else {
+            alert(data.error || 'เกิดข้อผิดพลาด');
+        }
+    });
+}
+
+function showResetPasswordModal(farmerId, username) {
+    const newPassword = prompt(`ตั้งรหัสผ่านใหม่สำหรับ ${username}:`);
+    if (newPassword && newPassword.length >= 4) {
+        if (confirm('ยืนยันการเปลี่ยนรหัสผ่าน?')) {
+            const csrfToken = getCsrfToken();
+            const headers = { 'Content-Type': 'application/json' };
+            if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+            
+            fetch(`/api/admin/farmer/${farmerId}/reset_password`, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({ password: newPassword, csrf_token: csrfToken })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert('เปลี่ยนรหัสผ่านสำเร็จ!');
+                } else {
+                    alert(data.error || 'เกิดข้อผิดพลาด');
+                }
+            });
+        }
+    } else if (newPassword) {
+        alert('รหัสผ่านต้องมีอย่างน้อย 4 ตัวอักษร');
+    }
+}
+</script>
+{% endblock %}
+

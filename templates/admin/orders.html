@@ -1,0 +1,552 @@
+{% extends "base.html" %}
+
+{% block title %}จัดการออเดอร์ - Termdee Farm{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="card-title">จัดการออเดอร์</h1>
+        <div class="btn-group">
+            <button class="btn btn-primary" onclick="showCreateOrderModal()">สร้างออเดอร์ใหม่</button>
+            <button class="btn btn-info" onclick="showTemplateModal()">
+                <i class="fas fa-file-alt"></i> ใช้เทมเพลต
+            </button>
+            <button class="btn btn-success" onclick="exportOrders()">
+                <i class="fas fa-download"></i> Export CSV
+            </button>
+            <button id="toggleRefreshBtn" class="btn btn-warning" onclick="toggleAutoRefresh()">
+                <i class="fas fa-pause"></i> หยุด Auto-Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Search & Filter -->
+    <div class="card mt-3" style="background: var(--bg-secondary);">
+        <form method="GET" action="{{ url_for('admin_orders') }}" id="filterForm">
+            <div class="grid grid-4" style="gap: 1rem;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">ค้นหา</label>
+                    <input type="text" name="search" class="form-control" 
+                           placeholder="Order Key, ลูกค้า, เซิร์ฟเวอร์" 
+                           value="{{ search }}">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">สถานะ</label>
+                    <select name="status" class="form-control">
+                        <option value="">ทั้งหมด</option>
+                        {% for status in all_statuses %}
+                        <option value="{{ status }}" {% if status_filter == status %}selected{% endif %}>
+                            {{ get_status_th(status) }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">ประเภท</label>
+                    <select name="item_type" class="form-control">
+                        <option value="">ทั้งหมด</option>
+                        {% for item_type in all_item_types %}
+                        <option value="{{ item_type }}" {% if item_type_filter == item_type %}selected{% endif %}>
+                            {{ item_type|upper }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">วันที่</label>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <input type="date" name="date_from" class="form-control" value="{{ date_from }}" style="flex: 1;">
+                        <input type="date" name="date_to" class="form-control" value="{{ date_to }}" style="flex: 1;">
+                    </div>
+                </div>
+            </div>
+            <div class="btn-group mt-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-search"></i> ค้นหา
+                </button>
+                <a href="{{ url_for('admin_orders') }}" class="btn btn-secondary">
+                    <i class="fas fa-redo"></i> รีเซ็ต
+                </a>
+            </div>
+        </form>
+    </div>
+
+    {% if orders %}
+    <div class="mt-3" style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <input type="checkbox" id="selectAll" onchange="toggleSelectAll()"> 
+            <label for="selectAll" style="margin-left: 0.5rem; cursor: pointer;">เลือกทั้งหมด</label>
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-warning" onclick="bulkUpdateStatus()" id="bulkStatusBtn" disabled>เปลี่ยนสถานะ</button>
+            <button class="btn btn-danger" onclick="bulkDeleteOrders()" id="bulkDeleteBtn" disabled>ลบที่เลือก</button>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th style="width: 40px;"><input type="checkbox" id="selectAllHeader" onchange="toggleSelectAll()"></th>
+                    <th>Order Key</th>
+                    <th>ลูกค้า</th>
+                    <th>เซิร์ฟเวอร์</th>
+                    <th>ประเภท</th>
+                    <th class="text-right">เป้าหมาย</th>
+                    <th class="text-right">จ่ายให้คนฟาร์ม</th>
+                    <th class="text-center">สถานะ</th>
+                    <th class="text-center">สร้างเมื่อ</th>
+                    <th class="text-center">จัดการ</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders %}
+                <tr>
+                    <td data-label=""><input type="checkbox" class="order-checkbox" value="{{ order.id }}" onchange="updateBulkButtons()"></td>
+                    <td data-label="Order Key"><strong>{{ order.order_key }}</strong></td>
+                    <td data-label="ลูกค้า">{{ order.customer_ref or '-' }}</td>
+                    <td data-label="เซิร์ฟเวอร์">{{ order.server_name or '-' }}</td>
+                    <td data-label="ประเภท">
+                        {% if order.order_items and order.order_items|length > 0 %}
+                            <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                                {% for item in order.order_items %}
+                                    <span class="item-{{ item.item_type }}">{{ item.item_type|upper }}: {{ "{:,}".format(item.target_amount|int) }}</span>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <span class="item-{{ order.item_type }}">{{ order.item_type|upper }}</span>
+                        {% endif %}
+                    </td>
+                    <td data-label="เป้าหมาย" class="text-right">
+                        {% if order.order_items and order.order_items|length > 0 %}
+                            {% set total = order.order_items|sum(attribute='target_amount') %}
+                            {{ "{:,}".format(total) }}
+                        {% else %}
+                            {{ "{:,}".format(order.target_amount|int) }}
+                        {% endif %}
+                    </td>
+                    <td data-label="จ่ายให้คนฟาร์ม" class="text-right">
+                        <strong style="color: var(--success-color);">
+                            {{ "{:,.2f}".format(order_payments.get(order.id, 0)) }} บาท
+                        </strong>
+                    </td>
+                    <td data-label="สถานะ" class="text-center"><span class="badge badge-{{ order.status }}">{{ get_status_th(order.status) }}</span></td>
+                    <td data-label="สร้างเมื่อ" class="text-center">{{ order.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                    <td data-label="จัดการ" class="text-center">
+                        <div class="btn-group" style="gap: 0.25rem;">
+                            <a href="{{ url_for('admin_order_detail', order_id=order.id) }}" class="btn btn-sm btn-primary">ดู</a>
+                            <button class="btn btn-sm btn-danger" onclick="deleteOrder({{ order.id }}, '{{ order.order_key }}')" style="background-color: #dc2626;">ลบ</button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Pagination -->
+    {% if pagination and pagination.pages > 1 %}
+    <div class="pagination" style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 2rem;">
+        {% if pagination.has_prev %}
+            <a href="{{ url_for('admin_orders', page=pagination.prev_num, search=search, status=status_filter, item_type=item_type_filter) }}" class="btn btn-sm btn-secondary">
+                <i class="fas fa-chevron-left"></i> ก่อนหน้า
+            </a>
+        {% endif %}
+        
+        <span style="padding: 0.5rem 1rem;">
+            หน้า {{ pagination.page }} จาก {{ pagination.pages }} 
+            (ทั้งหมด {{ pagination.total }} รายการ)
+        </span>
+        
+        {% if pagination.has_next %}
+            <a href="{{ url_for('admin_orders', page=pagination.next_num, search=search, status=status_filter, item_type=item_type_filter) }}" class="btn btn-sm btn-secondary">
+                ถัดไป <i class="fas fa-chevron-right"></i>
+            </a>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% else %}
+    <p class="text-center">ยังไม่มีออเดอร์</p>
+    {% endif %}
+</div>
+
+<script>
+// Auto-refresh ทุก 60 วินาที (1 นาที)
+let refreshInterval = null;
+let autoRefreshEnabled = localStorage.getItem('autoRefresh') !== 'false';
+
+function startAutoRefresh() {
+    if (refreshInterval) clearInterval(refreshInterval);
+    if (autoRefreshEnabled) {
+        refreshInterval = setInterval(() => {
+            location.reload();
+        }, 60000); // 60 วินาที
+    }
+}
+
+function toggleAutoRefresh() {
+    autoRefreshEnabled = !autoRefreshEnabled;
+    localStorage.setItem('autoRefresh', autoRefreshEnabled);
+    startAutoRefresh();
+    const btn = document.getElementById('toggleRefreshBtn');
+    if (btn) {
+        btn.innerHTML = autoRefreshEnabled 
+            ? '<i class="fas fa-pause"></i> หยุด Auto-Refresh' 
+            : '<i class="fas fa-play"></i> เปิด Auto-Refresh';
+        btn.className = autoRefreshEnabled ? 'btn btn-warning' : 'btn btn-success';
+    }
+}
+
+startAutoRefresh();
+
+function exportOrders() {
+    const form = document.getElementById('filterForm');
+    const formData = new FormData(form);
+    const params = new URLSearchParams();
+    
+    for (const [key, value] of formData.entries()) {
+        if (value) params.append(key, value);
+    }
+    
+    window.location.href = `/api/admin/export/orders?${params.toString()}`;
+}
+
+function toggleSelectAll() {
+    const selectAll = document.getElementById('selectAll').checked || document.getElementById('selectAllHeader').checked;
+    const checkboxes = document.querySelectorAll('.order-checkbox');
+    checkboxes.forEach(cb => cb.checked = selectAll);
+    document.getElementById('selectAll').checked = selectAll;
+    document.getElementById('selectAllHeader').checked = selectAll;
+    updateBulkButtons();
+}
+
+function updateBulkButtons() {
+    const checked = document.querySelectorAll('.order-checkbox:checked');
+    const hasSelection = checked.length > 0;
+    document.getElementById('bulkStatusBtn').disabled = !hasSelection;
+    document.getElementById('bulkDeleteBtn').disabled = !hasSelection;
+}
+
+function bulkUpdateStatus() {
+    const checked = document.querySelectorAll('.order-checkbox:checked');
+    if (checked.length === 0) {
+        showToast('กรุณาเลือกออเดอร์ที่ต้องการเปลี่ยนสถานะ', 'warning');
+        return;
+    }
+    
+    const orderIds = Array.from(checked).map(cb => parseInt(cb.value));
+    const newStatus = prompt('สถานะใหม่ (queued, assigned, farming, done, canceled):');
+    
+    if (!newStatus) return;
+    
+    showConfirmModal(
+        `ต้องการเปลี่ยนสถานะ ${orderIds.length} ออเดอร์เป็น "${newStatus}" หรือไม่?`,
+        () => {
+            showLoading(document.getElementById('bulkStatusBtn'));
+            const csrfToken = getCsrfToken();
+            const headers = { 'Content-Type': 'application/json' };
+            if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+            
+            fetch('/api/admin/orders/bulk-status', {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({ order_ids: orderIds, status: newStatus, csrf_token: csrfToken })
+            })
+            .then(r => r.json())
+            .then(data => {
+                hideLoading(document.getElementById('bulkStatusBtn'));
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showToast(data.error || 'เกิดข้อผิดพลาด', 'error');
+                }
+            })
+            .catch(err => {
+                hideLoading(document.getElementById('bulkStatusBtn'));
+                console.error(err);
+                showToast('เกิดข้อผิดพลาด', 'error');
+            });
+        }
+    );
+}
+
+function bulkDeleteOrders() {
+    const checked = document.querySelectorAll('.order-checkbox:checked');
+    if (checked.length === 0) {
+        alert('กรุณาเลือกออเดอร์ที่ต้องการลบ');
+        return;
+    }
+    
+    const orderIds = Array.from(checked).map(cb => parseInt(cb.value));
+    
+    showConfirmModal(
+        `คุณแน่ใจหรือไม่ว่าต้องการลบ ${orderIds.length} ออเดอร์?\n\nการลบนี้จะลบ:\n- ออเดอร์\n- งานทั้งหมดที่เกี่ยวข้อง\n- ประวัติการทำงาน\n\n⚠️ การกระทำนี้ไม่สามารถยกเลิกได้!`,
+        () => {
+            showLoading(document.getElementById('bulkDeleteBtn'));
+            const csrfToken = getCsrfToken();
+            const headers = { 'Content-Type': 'application/json' };
+            if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+            
+            fetch('/api/admin/orders/bulk-delete', {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({ order_ids: orderIds, csrf_token: csrfToken })
+            })
+            .then(r => r.json())
+            .then(data => {
+                hideLoading(document.getElementById('bulkDeleteBtn'));
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    if (data.errors && data.errors.length > 0) {
+                        showToast('ข้อผิดพลาด: ' + data.errors.join(', '), 'warning');
+                    }
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showToast(data.error || 'เกิดข้อผิดพลาด', 'error');
+                }
+            })
+            .catch(err => {
+                hideLoading(document.getElementById('bulkDeleteBtn'));
+                console.error(err);
+                showToast('เกิดข้อผิดพลาด', 'error');
+            });
+        }
+    );
+}
+
+function deleteOrder(orderId, orderKey) {
+    showConfirmModal(
+        `คุณแน่ใจหรือไม่ว่าต้องการลบออเดอร์ "${orderKey}"?\n\nการลบนี้จะลบ:\n- ออเดอร์\n- งานทั้งหมดที่เกี่ยวข้อง\n- ประวัติการทำงาน\n\n⚠️ การกระทำนี้ไม่สามารถยกเลิกได้!`,
+        () => {
+            const loadingToast = showToast('กำลังลบออเดอร์...', 'info', 0); // 0 = ไม่หายอัตโนมัติ
+            const csrfToken = getCsrfToken();
+            const headers = { 'Content-Type': 'application/json' };
+            if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+            
+            fetch(`/api/admin/order/${orderId}`, {
+                method: 'DELETE',
+                headers: headers,
+                body: JSON.stringify({ csrf_token: csrfToken })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (loadingToast && loadingToast.parentNode) {
+                    removeToast(loadingToast);
+                }
+                if (data.success) {
+                    showToast('ลบออเดอร์สำเร็จ', 'success', 3000);
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showToast(data.error || 'เกิดข้อผิดพลาด', 'error', 7000);
+                }
+            })
+            .catch(err => {
+                if (loadingToast && loadingToast.parentNode) {
+                    removeToast(loadingToast);
+                }
+                console.error(err);
+                showToast('เกิดข้อผิดพลาดในการลบออเดอร์', 'error', 7000);
+            });
+        }
+    );
+}
+</script>
+
+<!-- Create Order Modal -->
+<div id="createOrderModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 500px; margin: 2rem;">
+        <div class="card-header">
+            <h2>สร้างออเดอร์ใหม่</h2>
+            <button onclick="hideCreateOrderModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+        </div>
+        <form id="createOrderForm" onsubmit="createOrder(event)">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="form-group">
+                <label class="form-label">UID/ชื่อลูกค้า</label>
+                <input type="text" name="customer_ref" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">เซิร์ฟเวอร์ Oxide</label>
+                <input type="text" name="server_name" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">รายการของ</label>
+                <div id="orderItemsList">
+                    <div class="order-item-row" style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                        <select name="item_type" class="form-control" style="flex: 1;" required>
+                            <option value="wood">Wood</option>
+                            <option value="stone">Stone</option>
+                            <option value="sulfur">Sulfur</option>
+                            <option value="metal">Metal</option>
+                            <option value="scrap">Scrap</option>
+                            <option value="hqm">HQM</option>
+                        </select>
+                        <input type="number" name="target_amount" class="form-control" style="flex: 1;" required min="1" placeholder="จำนวน">
+                        <button type="button" class="btn btn-danger btn-sm" onclick="removeOrderItem(this)" style="display: none;">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="addOrderItem()" style="margin-top: 0.5rem;">
+                    <i class="fas fa-plus"></i> เพิ่มรายการ
+                </button>
+            </div>
+            <div class="form-group">
+                <label class="form-label">ความสำคัญ</label>
+                <select name="priority" class="form-control">
+                    <option value="normal">ปกติ</option>
+                    <option value="express">ด่วน</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">ส่วนลดให้ลูกค้า (%) (ไม่บังคับ)</label>
+                <input type="number" name="discount_percent" class="form-control" min="0" max="100" step="0.1" value="0" placeholder="เช่น 5 สำหรับ 5%">
+                <small style="color: var(--text-secondary);">ใส่เปอร์เซ็นต์ส่วนลดให้ลูกค้า (เช่น 5 = 5%)</small>
+            </div>
+            <div class="form-group">
+                <label class="form-label">หมายเหตุ (ไม่บังคับ)</label>
+                <textarea name="note_admin" class="form-control" rows="3"></textarea>
+            </div>
+            <div class="btn-group">
+                <button type="submit" class="btn btn-primary">สร้างออเดอร์</button>
+                <button type="button" class="btn btn-secondary" onclick="hideCreateOrderModal()">ยกเลิก</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function showCreateOrderModal() {
+    document.getElementById('createOrderModal').style.display = 'flex';
+    // Reset form
+    document.getElementById('createOrderForm').reset();
+    // Reset items list to single item
+    const itemsList = document.getElementById('orderItemsList');
+    itemsList.innerHTML = `
+        <div class="order-item-row" style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+            <select name="item_type" class="form-control" style="flex: 1;" required>
+                <option value="wood">Wood</option>
+                <option value="stone">Stone</option>
+                <option value="sulfur">Sulfur</option>
+                <option value="metal">Metal</option>
+                <option value="scrap">Scrap</option>
+                <option value="hqm">HQM</option>
+            </select>
+            <input type="number" name="target_amount" class="form-control" style="flex: 1;" required min="1" placeholder="จำนวน">
+            <button type="button" class="btn btn-danger btn-sm" onclick="removeOrderItem(this)" style="display: none;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `;
+}
+
+function hideCreateOrderModal() {
+    document.getElementById('createOrderModal').style.display = 'none';
+}
+
+function addOrderItem() {
+    const itemsList = document.getElementById('orderItemsList');
+    const itemRow = document.createElement('div');
+    itemRow.className = 'order-item-row';
+    itemRow.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 0.5rem;';
+    itemRow.innerHTML = `
+        <select name="item_type" class="form-control" style="flex: 1;" required>
+            <option value="wood">Wood</option>
+            <option value="stone">Stone</option>
+            <option value="sulfur">Sulfur</option>
+            <option value="metal">Metal</option>
+            <option value="scrap">Scrap</option>
+            <option value="hqm">HQM</option>
+        </select>
+        <input type="number" name="target_amount" class="form-control" style="flex: 1;" required min="1" placeholder="จำนวน">
+        <button type="button" class="btn btn-danger btn-sm" onclick="removeOrderItem(this)">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    itemsList.appendChild(itemRow);
+    updateRemoveButtons();
+}
+
+function removeOrderItem(btn) {
+    btn.closest('.order-item-row').remove();
+    updateRemoveButtons();
+}
+
+function updateRemoveButtons() {
+    const rows = document.querySelectorAll('.order-item-row');
+    rows.forEach(row => {
+        const removeBtn = row.querySelector('button.btn-danger');
+        if (removeBtn) {
+            removeBtn.style.display = rows.length > 1 ? 'block' : 'none';
+        }
+    });
+}
+
+function createOrder(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    
+    // รวบรวม items
+    const itemRows = form.querySelectorAll('.order-item-row');
+    const items = [];
+    itemRows.forEach(row => {
+        const itemType = row.querySelector('select[name="item_type"]').value;
+        const targetAmount = parseInt(row.querySelector('input[name="target_amount"]').value);
+        if (itemType && targetAmount > 0) {
+            items.push({
+                item_type: itemType,
+                target_amount: targetAmount
+            });
+        }
+    });
+    
+    if (items.length === 0) {
+        showToast('กรุณาเพิ่มอย่างน้อย 1 รายการ', 'error');
+        return;
+    }
+    
+    // ดึง CSRF token
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || 
+                     formData.get('csrf_token') || 
+                     document.querySelector('input[name="csrf_token"]')?.value;
+    
+    const data = {
+        customer_ref: formData.get('customer_ref'),
+        server_name: formData.get('server_name'),
+        items: items,
+        priority: formData.get('priority') || 'normal',
+        discount_percent: parseFloat(formData.get('discount_percent')) || 0,
+        note_admin: formData.get('note_admin') || '',
+        csrf_token: csrfToken
+    };
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) {
+        headers['X-CSRF-Token'] = csrfToken;
+    }
+
+    fetch('/api/admin/order', {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showToast('สร้างออเดอร์สำเร็จ! Order Key: ' + data.order_key, 'success', 5000);
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showToast(data.error || 'เกิดข้อผิดพลาด', 'error');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        showToast('เกิดข้อผิดพลาด', 'error');
+    });
+}
+</script>
+{% endblock %}
+

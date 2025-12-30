@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block title %}Termdee Farm - Community-driven Farming{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="hero-section">
+    <div class="hero-bg"></div>
+    <div class="hero-content">
+        <h1 class="hero-title">Termdee Farm</h1>
+        <p class="hero-subtitle">เติมดี มีแต่ได้ เพราะเราคุมทุกขั้นตอน</p>
+        <p class="hero-desc">
+            {{ page_content.subtitle or 'เริ่มจากการสร้างระบบ เพื่อให้การฟาร์มจำนวนมากยังคงโปร่งใส คุมได้ และตรวจสอบได้' }}
+        </p>
+        <div class="hero-buttons">
+            <a href="{{ url_for('estimator') }}" class="btn btn-primary btn-lg">
+                <span><i class="fas fa-calculator"></i> ประเมินราคา</span>
+            </a>
+            <a href="#features" class="btn btn-outline btn-lg">
+                <span><i class="fas fa-arrow-down"></i> เรียนรู้เพิ่มเติม</span>
+            </a>
+        </div>
+    </div>
+    <div class="hero-scroll" onclick="document.getElementById('features').scrollIntoView({behavior: 'smooth'})">
+        <i class="fas fa-chevron-down"></i>
+    </div>
+</div>
+
+<div class="container">
+    <div class="intro-section">
+        <p class="intro-text">
+            เราเชื่อว่าผู้เล่นควรรู้ตั้งแต่แรกว่า งานของตัวเองอยู่ขั้นไหน ใช้เวลาประมาณเท่าไร และประเมินค่าแรงยังไง
+        </p>
+    </div>
+
+    <div id="features" class="features-grid">
+        <!-- Feature 1: เราคืออะไร -->
+        <div class="feature-card">
+            <div class="feature-icon feature-icon-primary">
+                <i class="fas fa-puzzle-piece"></i>
+            </div>
+            <h3>เราคืออะไร</h3>
+            <p><strong>Termdee Farm</strong> คือพื้นที่ที่รวม:</p>
+            <ul>
+                <li>คอมมูนิตี้ผู้เล่นเกม</li>
+                <li>ระบบจัดการงานฟาร์ม</li>
+                <li>เครื่องมือช่วยประเมินงานอย่างโปร่งใส</li>
+            </ul>
+            <p class="feature-quote">
+                เราใส่ใจใน
+                <br>
+                 <strong>ความชัดเจนและความนิ่ง</strong>
+            </p>
+        </div>
+
+        <!-- Feature 2: ระบบการทำงาน -->
+        <div class="feature-card">
+            <div class="feature-icon feature-icon-success">
+                <i class="fas fa-cogs"></i>
+            </div>
+            <h3>ระบบการทำงาน</h3>
+            <p>ทุกงานจะเข้าสู่กระบวนการเดียวกัน:</p>
+            <ol>
+                <li>ประเมินงานจากระบบ</li>
+                <li>จัดลำดับคิวตามภาระงานจริง</li>
+                <li>ดำเนินงานตามเงื่อนไขที่ตกลง</li>
+                <li>อัปเดตสถานะให้ตรวจสอบได้</li>
+                <li>ปิดงานอย่างชัดเจนเมื่อเสร็จ</li>
+            </ol>
+            <p class="feature-highlight">
+                ไม่มีงานพิเศษ ไม่มีทางลัด<br>
+                ทุกงานอยู่ภายใต้มาตรฐานเดียวกัน
+            </p>
+        </div>
+
+        <!-- Feature 3: ระบบคำนวณราคา -->
+        <div class="feature-card feature-card-large">
+            <div class="feature-icon feature-icon-warning">
+                <i class="fas fa-calculator"></i>
+            </div>
+            <h3>ระบบคำนวณราคา & ประมาณเวลาฟาร์ม</h3>
+            <p>เราใช้ <strong>ระบบประเมินงาน (Estimate System)</strong> เพื่อให้ผู้เล่นเห็นภาพก่อนตัดสินใจ</p>
+            
+            <div class="feature-columns">
+                <div>
+                    <h4>สิ่งที่ระบบใช้ในการคำนวณ:</h4>
+                    <ul>
+                        <li>ประเภทงาน</li>
+                        <li>จำนวนหรือเป้าหมายที่ต้องการ</li>
+                        <li>ระดับความเร่งด่วน</li>
+                        <li>สถานะความหนาแน่นของงาน</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4>สิ่งที่ระบบแสดงผล:</h4>
+                    <ul>
+                        <li><i class="fas fa-money-bill-wave"></i> ราคาประเมิน</li>
+                        <li><i class="fas fa-clock"></i> ระยะเวลาฟาร์ม</li>
+                        <li><i class="fas fa-chart-bar"></i> ภาระงานปัจจุบัน</li>
+                        <li><i class="fas fa-info-circle"></i> หมายเหตุเงื่อนไข</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <a href="{{ url_for('estimator') }}" class="btn btn-primary btn-full">
+                <i class="fas fa-calculator"></i> ไปที่หน้า Price & Time Estimator
+            </a>
+        </div>
+
+        <!-- Feature 4: ติดตามสถานะงาน -->
+        <div class="feature-card">
+            <div class="feature-icon feature-icon-info">
+                <i class="fas fa-chart-line"></i>
+            </div>
+            <h3>ติดตามสถานะงานแบบเรียลไทม์</h3>
+            <p>เราเชื่อว่าผู้เล่นไม่ควรต้องถามซ้ำ</p>
+            <p>ด้วย <strong>ระบบติดตามสถานะงาน</strong> เพียงกรอกรหัสงาน ก็สามารถดูได้ว่า:</p>
+            <div class="status-list">
+                <span class="status-tag status-pending">รับงานแล้ว</span>
+                <span class="status-tag status-progress">กำลังดำเนินการ</span>
+                <span class="status-tag status-almost">ใกล้เสร็จ</span>
+                <span class="status-tag status-done">งานเสร็จสมบูรณ์</span>
+            </div>
+            <a href="{{ url_for('track_order') }}" class="btn btn-secondary" style="margin-top: 1rem;">
+                <i class="fas fa-search"></i> ไปที่หน้า Live Job Status
+            </a>
+        </div>
+
+        <!-- Feature 5: ความปลอดภัย -->
+        <div class="feature-card">
+            <div class="feature-icon feature-icon-danger">
+                <i class="fas fa-shield-alt"></i>
+            </div>
+            <h3>ความปลอดภัย & ความเชื่อใจ</h3>
+            <div class="security-list">
+                <div class="security-dont">
+                    <p><i class="fas fa-times-circle"></i> ไม่ขอรหัสผ่าน</p>
+                    <p><i class="fas fa-times-circle"></i> ไม่ขอ OTP หรือโค้ดกู้คืน</p>
+                    <p><i class="fas fa-times-circle"></i> ไม่ใช้บอท โปร หรือวิธีเสี่ยง</p>
+                </div>
+                <div class="security-do">
+                    <p><i class="fas fa-check-circle"></i> ทำงานตามเงื่อนไขที่ตกลง</p>
+                    <p><i class="fas fa-check-circle"></i> ทุกงานมีสถานะและบันทึก</p>
+                </div>
+            </div>
+            <p class="feature-quote">
+                ความเชื่อใจไม่ควรถูกขอ<br>
+                มันต้องมาจากโครงสร้างที่ตรวจสอบได้
+            </p>
+        </div>
+
+        <!-- Feature 6: คอมมูนิตี้ -->
+        <div class="feature-card">
+            <div class="feature-icon feature-icon-primary">
+                <i class="fas fa-seedling"></i>
+            </div>
+            <h3>คอมมูนิตี้ที่ขับเคลื่อนด้วยระบบ</h3>
+            <p><strong>Termdee Farm</strong> เติบโตจากคอมมูนิตี้ ไม่ใช่จากการโฆษณา
+                แต่เติบโตจากระบบที่ทำให้ทุกฝ่ายทำงานร่วมกันได้จริง</p>
+            <p>สิ่งที่ระบบของเราทำให้เกิดขึ้น:</p>
+            <ul>
+                <li>งานถูกจัดคิวอัตโนมัติ ไม่แซง ไม่มั่ว</li>
+                <li>ทุกคนเห็นสถานะเดียวกัน ลดการโต้เถียง</li>
+                <li>การทำงานวัดผลได้ ไม่ต้องเชื่อจากคำพูด</li>
+            </ul>
+            <p class="feature-highlight">
+                เราไม่ได้พยายามเป็นร้านที่ถูกที่สุด<br>
+                แต่เป็นระบบที่ <strong>ทำงานได้จริงในระยะยาว</strong>
+            </p>
+        </div>
+    </div>
+
+    <!-- Philosophy Section -->
+    <div class="philosophy-section">
+        <div class="philosophy-content">
+            <i class="fas fa-lightbulb philosophy-icon"></i>
+            <h2>แนวคิดของ Termdee Farm</h2>
+            <blockquote>
+                "เราไม่ได้พยายามขายให้เร็วที่สุด<br>
+                เราพยายามทำให้คนที่เข้ามา<br>
+                รู้สึกว่าทุกอย่างอยู่ในการควบคุม"
+            </blockquote>
+        </div>
+    </div>
+
+    <!-- CTA Section -->
+    <div class="cta-section">
+        <div class="cta-buttons">
+            <a href="{{ url_for('track_order') }}" class="btn btn-primary btn-lg">
+                <i class="fas fa-search"></i> ติดตามออเดอร์
+            </a>
+            {% if not current_user.is_authenticated %}
+            <a href="{{ url_for('farmer_login') }}" class="btn btn-success btn-lg">
+                <i class="fas fa-sign-in-alt"></i> เข้าสู่ระบบ
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+

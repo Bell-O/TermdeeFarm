@@ -1,0 +1,461 @@
+{% extends "base.html" %}
+
+{% block title %}ตั้งค่าระบบ - Termdee Farm{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="card-title">ตั้งค่าระบบ</h1>
+    </div>
+
+    <div class="mt-3">
+        <h2>ตั้งค่าเวลารอ (ETA)</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+            ตั้งค่าสำหรับคำนวณเวลารอโดยประมาณที่แสดงให้ลูกค้า
+        </p>
+
+        <form id="settingsForm" onsubmit="updateSettings(event)">
+            <div class="form-group">
+                <label class="form-label" for="avg_minutes_per_order">
+                    เวลาเฉลี่ยต่อออเดอร์ (นาที)
+                </label>
+                <input type="number" id="avg_minutes_per_order" name="avg_minutes_per_order" 
+                       class="form-control" value="{{ settings.avg_minutes_per_order }}" 
+                       min="1" required>
+                <small style="color: var(--text-secondary);">
+                    เวลาเฉลี่ยที่ใช้ในการฟาร์ม 1 ออเดอร์ (เช่น 25 นาที)
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="eta_buffer_percent">
+                    Buffer เพิ่มเติม (%)
+                </label>
+                <input type="number" id="eta_buffer_percent" name="eta_buffer_percent" 
+                       class="form-control" value="{{ settings.eta_buffer_percent }}" 
+                       min="0" max="100" step="0.1" required>
+                <small style="color: var(--text-secondary);">
+                    เปอร์เซ็นต์เพิ่มเติมเพื่อเผื่อเวลา (เช่น 10% = เพิ่มเวลา 10%)
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="max_delta_per_click">
+                    จำกัดการเพิ่มยอดต่อครั้ง (ต่อคลิก)
+                </label>
+                <input type="number" id="max_delta_per_click" name="max_delta_per_click" 
+                       class="form-control" value="{{ settings.max_delta_per_click }}" 
+                       min="1" required>
+                <small style="color: var(--text-secondary);">
+                    จำนวนสูงสุดที่คนฟาร์มสามารถเพิ่มยอดได้ต่อ 1 ครั้ง (เช่น 10,000)
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="max_delta_per_action">
+                    จำกัดการเพิ่มยอดต่อการกระทำ (รวม)
+                </label>
+                <input type="number" id="max_delta_per_action" name="max_delta_per_action" 
+                       class="form-control" value="{{ settings.max_delta_per_action }}" 
+                       min="1" required>
+                <small style="color: var(--text-secondary);">
+                    จำนวนสูงสุดที่คนฟาร์มสามารถเพิ่มยอดได้ต่อการกระทำทั้งหมด (เช่น 50,000)
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="commission_percent">
+                    ค่าคนกลาง (%)
+                </label>
+                <input type="number" id="commission_percent" name="commission_percent" 
+                       class="form-control" value="{{ settings.commission_percent or 10.0 }}" 
+                       min="0" max="100" step="0.1" required>
+                <small style="color: var(--text-secondary);">
+                    เปอร์เซ็นต์ค่าคนกลางที่จะหักจากเงินที่จะได้ (เช่น 10 = 10%)
+                </small>
+            </div>
+
+            <div class="btn-group">
+                <button type="submit" class="btn btn-primary">บันทึกการตั้งค่า</button>
+                <button type="button" class="btn btn-secondary" onclick="resetSettings()">รีเซ็ตเป็นค่าเริ่มต้น</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="mt-4">
+        <h2>ตั้งค่าราคา (บาท)</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+            ตั้งค่าราคาต่อ 1000 items (หรือ 100 สำหรับ HQM) สำหรับคำนวณเงินที่จะได้
+        </p>
+
+        <form id="priceForm" onsubmit="updatePrices(event)">
+            <div class="grid grid-2">
+                <div class="form-group">
+                    <label class="form-label" for="price_per_1000_wood">ไม้ (Wood) ต่อ 1000</label>
+                    <input type="number" id="price_per_1000_wood" name="price_per_1000_wood" 
+                           class="form-control" value="{{ settings.price_per_1000_wood or 8.0 }}" 
+                           min="0" step="0.01" required>
+                    <small style="color: var(--text-secondary);">บาท</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="price_per_1000_stone">หิน (Stone) ต่อ 1000</label>
+                    <input type="number" id="price_per_1000_stone" name="price_per_1000_stone" 
+                           class="form-control" value="{{ settings.price_per_1000_stone or 7.0 }}" 
+                           min="0" step="0.01" required>
+                    <small style="color: var(--text-secondary);">บาท</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="price_per_1000_sulfur">กำมะถัน (Sulfur) ต่อ 1000</label>
+                    <input type="number" id="price_per_1000_sulfur" name="price_per_1000_sulfur" 
+                           class="form-control" value="{{ settings.price_per_1000_sulfur or 30.0 }}" 
+                           min="0" step="0.01" required>
+                    <small style="color: var(--text-secondary);">บาท</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="price_per_1000_metal">เหล็ก (Metal) ต่อ 1000</label>
+                    <input type="number" id="price_per_1000_metal" name="price_per_1000_metal" 
+                           class="form-control" value="{{ settings.price_per_1000_metal or 9.0 }}" 
+                           min="0" step="0.01" required>
+                    <small style="color: var(--text-secondary);">บาท</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="price_per_1000_scrap">Scrap ต่อ 1000</label>
+                    <input type="number" id="price_per_1000_scrap" name="price_per_1000_scrap" 
+                           class="form-control" value="{{ settings.price_per_1000_scrap or 125.0 }}" 
+                           min="0" step="0.01" required>
+                    <small style="color: var(--text-secondary);">บาท</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="price_per_100_hqm">HQM ต่อ 100</label>
+                    <input type="number" id="price_per_100_hqm" name="price_per_100_hqm" 
+                           class="form-control" value="{{ settings.price_per_100_hqm or 100.0 }}" 
+                           min="0" step="0.01" required>
+                    <small style="color: var(--text-secondary);">บาท</small>
+                </div>
+            </div>
+            <div class="btn-group mt-3">
+                <button type="submit" class="btn btn-primary">บันทึกราคา</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="mt-4">
+        <h2>ค่าบริการ</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+            ตั้งค่าค่าบริการร้าน Termdee ที่จะเพิ่มในราคารวมทุกออเดอร์
+        </p>
+
+        <form id="serviceFeeForm" onsubmit="updateServiceFee(event)">
+            <div class="form-group">
+                <label class="form-label" for="service_fee">ค่าบริการร้าน Termdee (บาท)</label>
+                <input type="number" id="service_fee" name="service_fee" 
+                       class="form-control" value="{{ settings.service_fee or 10.0 }}" 
+                       min="0" step="0.01" required>
+                <small style="color: var(--text-secondary);">
+                    ค่าบริการที่เพิ่มในราคารวมทุกออเดอร์ (เช่น 10.0 = 10 บาท)
+                </small>
+            </div>
+            <div class="btn-group mt-3">
+                <button type="submit" class="btn btn-primary">บันทึกค่าบริการ</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="mt-4">
+        <h2>Discord Webhook</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+            ตั้งค่า Discord Webhook URL เพื่อรับแจ้งเตือนเมื่อมี Task ใหม่
+        </p>
+
+        <form id="webhookForm" onsubmit="updateWebhook(event)">
+            <div class="form-group">
+                <label class="form-label" for="discord_webhook_url">Discord Webhook URL</label>
+                <input type="url" id="discord_webhook_url" name="discord_webhook_url" 
+                       class="form-control" value="{{ settings.discord_webhook_url or '' }}" 
+                       placeholder="https://discord.com/api/webhooks/...">
+                <small style="color: var(--text-secondary);">
+                    ใส่ URL ของ Discord Webhook ที่ต้องการรับแจ้งเตือน (ไม่บังคับ)
+                </small>
+            </div>
+            <div class="btn-group mt-3">
+                <button type="submit" class="btn btn-primary">บันทึก Webhook</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="mt-4">
+        <h2>ตั้งค่าอัตราการฟาร์ม (Items per Hour)</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+            ตั้งค่าอัตราการฟาร์มต่อชั่วโมงสำหรับแต่ละประเภทของ ระบบจะคำนวณเวลาที่ใช้ในการฟาร์มอัตโนมัติจากจำนวนของที่ต้องฟาร์ม
+        </p>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+            <strong>ตัวอย่าง:</strong> ไม้ 24,000 ต้องใช้เวลา 5 ชั่วโมง → อัตรา = 24,000 ÷ 5 = 4,800 ต่อชั่วโมง
+        </p>
+
+        <form id="farmingRateForm" onsubmit="updateFarmingRates(event)">
+            <div class="grid grid-2">
+                <div class="form-group">
+                    <label class="form-label" for="farming_rate_wood">ไม้ (Wood) ต่อชั่วโมง</label>
+                    <input type="number" id="farming_rate_wood" name="farming_rate_wood" 
+                           class="form-control" value="{{ settings.farming_rate_wood or 4800 }}" 
+                           min="1" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="farming_rate_stone">หิน (Stone) ต่อชั่วโมง</label>
+                    <input type="number" id="farming_rate_stone" name="farming_rate_stone" 
+                           class="form-control" value="{{ settings.farming_rate_stone or 4800 }}" 
+                           min="1" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="farming_rate_sulfur">กำมะถัน (Sulfur) ต่อชั่วโมง</label>
+                    <input type="number" id="farming_rate_sulfur" name="farming_rate_sulfur" 
+                           class="form-control" value="{{ settings.farming_rate_sulfur or 4800 }}" 
+                           min="1" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="farming_rate_metal">เหล็ก (Metal) ต่อชั่วโมง</label>
+                    <input type="number" id="farming_rate_metal" name="farming_rate_metal" 
+                           class="form-control" value="{{ settings.farming_rate_metal or 4800 }}" 
+                           min="1" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="farming_rate_scrap">ซาก (Scrap) ต่อชั่วโมง</label>
+                    <input type="number" id="farming_rate_scrap" name="farming_rate_scrap" 
+                           class="form-control" value="{{ settings.farming_rate_scrap or 4800 }}" 
+                           min="1" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="farming_rate_hqm">HQM ต่อชั่วโมง</label>
+                    <input type="number" id="farming_rate_hqm" name="farming_rate_hqm" 
+                           class="form-control" value="{{ settings.farming_rate_hqm or 4800 }}" 
+                           min="1" required>
+                </div>
+            </div>
+            <div class="btn-group mt-3">
+                <button type="submit" class="btn btn-primary">บันทึกอัตราการฟาร์ม</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="mt-4">
+        <h3>ตัวอย่างการคำนวณ</h3>
+        <div class="card" style="background: #f8fafc;">
+            <p><strong>สูตร:</strong> เวลารอ = (จำนวนคิวก่อนหน้า × เวลาเฉลี่ย) × (1 + Buffer%)</p>
+            <p><strong>ตัวอย่าง:</strong></p>
+            <ul>
+                <li>คิวก่อนหน้า: 3 คิว</li>
+                <li>เวลาเฉลี่ย: {{ settings.avg_minutes_per_order }} นาที</li>
+                <li>Buffer: {{ settings.eta_buffer_percent }}%</li>
+                <li><strong>เวลารอ = (3 × {{ settings.avg_minutes_per_order }}) × (1 + {{ settings.eta_buffer_percent }}/100) = {{ ((3 * settings.avg_minutes_per_order) * (1 + settings.eta_buffer_percent/100))|int }} นาที</strong></li>
+            </ul>
+            <hr style="margin: 1rem 0;">
+            <p><strong>สูตรคำนวณเวลาฟาร์ม:</strong> เวลาที่ใช้ (ชั่วโมง) = จำนวนของ ÷ อัตราการฟาร์มต่อชั่วโมง</p>
+            <p><strong>ตัวอย่าง:</strong></p>
+            <ul>
+                <li>ไม้ 24,000 ÷ {{ settings.farming_rate_wood or 4800 }} ต่อชั่วโมง = {{ (24000 / (settings.farming_rate_wood or 4800))|round(2) }} ชั่วโมง</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Backup & Restore -->
+    <div class="card mt-3">
+        <div class="card-header">
+            <h2>สำรองข้อมูล</h2>
+        </div>
+        <div class="form-group">
+            <p>ดาวน์โหลดข้อมูลทั้งหมดเป็นไฟล์ JSON สำหรับสำรองข้อมูล</p>
+            <button class="btn btn-primary" onclick="downloadBackup()">
+                <i class="fas fa-download"></i> ดาวน์โหลดข้อมูลสำรอง
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+function downloadBackup() {
+    if (!confirm('ต้องการดาวน์โหลดข้อมูลสำรองหรือไม่?')) {
+        return;
+    }
+    window.location.href = '/api/admin/backup';
+}
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function updateSettings(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    const data = {
+        avg_minutes_per_order: parseInt(formData.get('avg_minutes_per_order')),
+        eta_buffer_percent: parseFloat(formData.get('eta_buffer_percent')),
+        max_delta_per_click: parseInt(formData.get('max_delta_per_click')),
+        max_delta_per_action: parseInt(formData.get('max_delta_per_action')),
+        commission_percent: parseFloat(formData.get('commission_percent'))
+    };
+
+    fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('บันทึกการตั้งค่าสำเร็จ!');
+            location.reload();
+        } else {
+            alert(data.error || 'เกิดข้อผิดพลาด');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('เกิดข้อผิดพลาดในการบันทึก');
+    });
+}
+
+function updateFarmingRates(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    const data = {
+        farming_rate_wood: parseInt(formData.get('farming_rate_wood')),
+        farming_rate_stone: parseInt(formData.get('farming_rate_stone')),
+        farming_rate_sulfur: parseInt(formData.get('farming_rate_sulfur')),
+        farming_rate_metal: parseInt(formData.get('farming_rate_metal')),
+        farming_rate_scrap: parseInt(formData.get('farming_rate_scrap')),
+        farming_rate_hqm: parseInt(formData.get('farming_rate_hqm'))
+    };
+
+    fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('บันทึกอัตราการฟาร์มสำเร็จ!');
+            location.reload();
+        } else {
+            alert(data.error || 'เกิดข้อผิดพลาด');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('เกิดข้อผิดพลาดในการบันทึก');
+    });
+}
+
+function updatePrices(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    const data = {
+        price_per_1000_wood: parseFloat(formData.get('price_per_1000_wood')),
+        price_per_1000_stone: parseFloat(formData.get('price_per_1000_stone')),
+        price_per_1000_sulfur: parseFloat(formData.get('price_per_1000_sulfur')),
+        price_per_1000_metal: parseFloat(formData.get('price_per_1000_metal')),
+        price_per_1000_scrap: parseFloat(formData.get('price_per_1000_scrap')),
+        price_per_100_hqm: parseFloat(formData.get('price_per_100_hqm'))
+    };
+
+    fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('บันทึกราคาสำเร็จ!');
+            location.reload();
+        } else {
+            alert(data.error || 'เกิดข้อผิดพลาด');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('เกิดข้อผิดพลาดในการบันทึก');
+    });
+}
+
+function updateServiceFee(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    const data = {
+        service_fee: parseFloat(formData.get('service_fee'))
+    };
+
+    const csrfToken = getCsrfToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+    data.csrf_token = csrfToken;
+
+    fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('บันทึกค่าบริการสำเร็จ!');
+            location.reload();
+        } else {
+            alert(data.error || 'เกิดข้อผิดพลาด');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('เกิดข้อผิดพลาดในการบันทึก');
+    });
+}
+
+function updateWebhook(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    const data = {
+        discord_webhook_url: formData.get('discord_webhook_url') || null
+    };
+
+    const csrfToken = getCsrfToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+    data.csrf_token = csrfToken;
+
+    fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('บันทึก Webhook สำเร็จ!');
+            location.reload();
+        } else {
+            alert(data.error || 'เกิดข้อผิดพลาด');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('เกิดข้อผิดพลาดในการบันทึก');
+    });
+}
+
+function resetSettings() {
+    if (confirm('ต้องการรีเซ็ตการตั้งค่าเป็นค่าเริ่มต้นหรือไม่?')) {
+        document.getElementById('avg_minutes_per_order').value = 25;
+        document.getElementById('eta_buffer_percent').value = 10;
+        document.getElementById('max_delta_per_click').value = 10000;
+        document.getElementById('max_delta_per_action').value = 50000;
+        document.getElementById('commission_percent').value = 10;
+    }
+}
+</script>
+{% endblock %}
+

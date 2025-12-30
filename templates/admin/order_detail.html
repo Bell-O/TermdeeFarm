@@ -1,0 +1,1143 @@
+{% extends "base.html" %}
+
+{% block title %}รายละเอียดออเดอร์ - Termdee Farm{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="card-title">รายละเอียดออเดอร์: {{ order.order_key }}</h1>
+        <div class="btn-group">
+            <a href="{{ url_for('admin_orders') }}" class="btn btn-secondary">กลับ</a>
+            <button class="btn btn-danger" onclick="deleteOrder({{ order.id }}, '{{ order.order_key }}')">ลบออเดอร์</button>
+            <button id="toggleRefreshBtn" class="btn btn-warning" onclick="toggleAutoRefresh()">
+                <i class="fas fa-pause"></i> หยุด Auto-Refresh
+            </button>
+        </div>
+    </div>
+
+    <div class="grid grid-2 mt-3">
+        <div>
+            <div class="flex-between">
+                <h3>ข้อมูลออเดอร์</h3>
+                <button class="btn btn-sm btn-secondary" onclick="showEditOrderModal()">
+                    <i class="fas fa-edit"></i> แก้ไข
+                </button>
+            </div>
+            <p><strong>Order Key:</strong> {{ order.order_key }}</p>
+            <p><strong>ลูกค้า:</strong> <span id="order_customer_ref">{{ order.customer_ref or '-' }}</span></p>
+            <p><strong>เซิร์ฟเวอร์:</strong> <span id="order_server_name">{{ order.server_name or '-' }}</span></p>
+            <p><strong>รายการของ:</strong>
+                {% if order.order_items and order.order_items|length > 0 %}
+                    <div style="margin-top: 0.5rem;">
+                        {% for item in order.order_items %}
+                            <div style="margin-bottom: 0.25rem;">
+                                <span class="item-{{ item.item_type }}">{{ item.item_type|upper }}</span>: 
+                                <strong>{{ "{:,}".format(item.target_amount|int) }}</strong>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <span class="item-{{ order.item_type }}" id="order_item_type">{{ order.item_type|upper }}</span>: 
+                    <span id="order_target_amount">{{ order.target_amount|int }}</span>
+                {% endif %}
+            </p>
+            <p><strong>Priority:</strong> <span id="order_priority">{{ 'ด่วน' if order.priority == 'express' else 'ปกติ' }}</span></p>
+            <p><strong>สถานะ:</strong> <span class="badge badge-{{ order.status }}">{{ get_status_th(order.status) }}</span></p>
+            {% if order.discount_percent and order.discount_percent > 0 %}
+            <p><strong>ส่วนลดให้ลูกค้า:</strong> <span style="color: var(--success-color); font-weight: bold;" id="order_discount">{{ order.discount_percent }}%</span></p>
+            {% else %}
+            <p><strong>ส่วนลดให้ลูกค้า:</strong> <span id="order_discount">0%</span></p>
+            {% endif %}
+            <p><strong>คนรับงาน:</strong>
+                {% set assigned_farmers = [] %}
+                {% set unassigned_tasks = [] %}
+                {% for task in tasks %}
+                    {% if task.farmer_id %}
+                        {% set farmer_name = task.farmer.display_name or task.farmer.username %}
+                        {% if farmer_name not in assigned_farmers %}
+                            {% set _ = assigned_farmers.append(farmer_name) %}
+                        {% endif %}
+                    {% else %}
+                        {% set _ = unassigned_tasks.append(1) %}
+                    {% endif %}
+                {% endfor %}
+                {% if assigned_farmers %}
+                    <span style="display: inline-flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.25rem;">
+                        {% for farmer_name in assigned_farmers %}
+                            <span class="badge badge-success" style="font-size: 0.875rem;">
+                                <i class="fas fa-user"></i> {{ farmer_name }}
+                            </span>
+                        {% endfor %}
+                    </span>
+                {% else %}
+                    <span style="color: var(--text-secondary);">ยังไม่มีคนรับงาน</span>
+                {% endif %}
+                {% if unassigned_tasks|length > 0 %}
+                    <span class="badge badge-warning" style="font-size: 0.875rem; margin-left: 0.5rem;">
+                        <i class="fas fa-exclamation-circle"></i> {{ unassigned_tasks|length }} งานยังไม่มอบหมาย
+                    </span>
+                {% endif %}
+            </p>
+            <p><strong>สร้างเมื่อ:</strong> {{ order.created_at.strftime('%d/%m/%Y %H:%M') }}</p>
+            <p><strong>ลิงก์ติดตาม:</strong> <a href="{{ url_for('track_order_key', order_key=order.order_key, _external=True) }}" target="_blank">{{ url_for('track_order_key', order_key=order.order_key, _external=True) }}</a></p>
+            <p><strong>QR Code:</strong> <br><img src="{{ url_for('api_generate_qrcode', order_key=order.order_key) }}" alt="QR Code" style="max-width: 100px; height: auto; border: 1px solid #ddd; padding: 5px; background: white; margin-top: 0.5rem;"></p>
+            {% if order.note_admin %}
+            <p><strong>หมายเหตุ:</strong> <span style="color: var(--text-secondary);">{{ order.note_admin }}</span></p>
+            {% endif %}
+        </div>
+        <div>
+            <h3>จัดการออเดอร์</h3>
+            <div class="form-group">
+                <label class="form-label">หมายเหตุ (ไม่บังคับ)</label>
+                <textarea id="orderNote" class="form-control" rows="3" placeholder="เพิ่มหมายเหตุสำหรับออเดอร์นี้...">{{ order.note_admin or '' }}</textarea>
+                <button class="btn btn-sm btn-primary mt-1" onclick="updateOrderNote({{ order.id }})">บันทึกหมายเหตุ</button>
+            </div>
+            <div class="btn-group mt-2" style="flex-direction: column; gap: 0.5rem;">
+                <button class="btn btn-info" onclick="duplicateOrder({{ order.id }})">
+                    <i class="fas fa-copy"></i> คัดลอกออเดอร์
+                </button>
+            <div class="form-group">
+                <label class="form-label">เปลี่ยนสถานะ</label>
+                <select id="statusSelect" class="form-control">
+                    <option value="queued" {% if order.status == 'queued' %}selected{% endif %}>{{ get_status_th('queued') }}</option>
+                    <option value="assigned" {% if order.status == 'assigned' %}selected{% endif %}>{{ get_status_th('assigned') }}</option>
+                    <option value="farming" {% if order.status == 'farming' %}selected{% endif %}>{{ get_status_th('farming') }}</option>
+                    <option value="delivering" {% if order.status == 'delivering' %}selected{% endif %}>{{ get_status_th('delivering') }}</option>
+                    <option value="done" {% if order.status == 'done' %}selected{% endif %}>{{ get_status_th('done') }}</option>
+                    <option value="canceled" {% if order.status == 'canceled' %}selected{% endif %}>{{ get_status_th('canceled') }}</option>
+                </select>
+                <button class="btn btn-primary mt-2" onclick="updateStatus({{ order.id }})">อัปเดตสถานะ</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-3">
+        <div class="flex-between">
+            <h3>งาน (Tasks)</h3>
+            <button class="btn btn-primary" onclick="showCreateTaskModal({{ order.id }})">สร้าง Task ใหม่</button>
+        </div>
+        <p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.5rem;">
+            สามารถแบ่งงานเป็นหลาย Task และมอบหมายให้คนฟาร์มหลายคนได้
+        </p>
+        
+        {% if tasks %}
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th class="text-center number">ID</th>
+                        <th>คนฟาร์ม</th>
+                        <th>เซิร์ฟเวอร์</th>
+                        <th class="text-right">เป้าหมาย</th>
+                        <th class="text-right">ปัจจุบัน</th>
+                        <th class="text-center">สถานะ</th>
+                        <th class="text-center">จัดการ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for task in tasks %}
+                    <tr data-task-id="{{ task.id }}">
+                        <td data-label="ID" class="text-center number">{{ task.id }}</td>
+                        <td data-label="คนฟาร์ม">
+                            {% if task.farmer %}
+                                {{ task.farmer.display_name or task.farmer.username }}
+                                {% set active_count = farmer_task_counts.get(task.farmer.id, 0) %}
+                                {% if active_count > 1 %}
+                                <small style="color: var(--text-secondary);">({{ active_count }} งาน)</small>
+                                {% endif %}
+                            {% else %}
+                                <span style="color: var(--text-secondary);">ยังไม่มอบหมาย</span>
+                            {% endif %}
+                        </td>
+                        <td data-label="เซิร์ฟเวอร์" id="task_{{ task.id }}_server_name">{{ task.server_name or '-' }}</td>
+                        <td data-label="เป้าหมาย" class="text-right number" id="task_{{ task.id }}_target_amount">
+                            {% if task.task_items and task.task_items|length > 0 %}
+                                {% for item in task.task_items %}
+                                    <div><span class="item-{{ item.item_type }}">{{ item.item_type|upper }}</span>: {{ "{:,}".format(item.target_amount|int) }}</div>
+                                {% endfor %}
+                            {% else %}
+                                {{ "{:,}".format(task.target_amount|int) }}
+                            {% endif %}
+                        </td>
+                        <td data-label="ปัจจุบัน" class="text-right number">
+                            {% if task.task_items and task.task_items|length > 0 %}
+                                {% for item in task.task_items %}
+                                    <div><strong>{{ "{:,}".format(item.current_amount|int) }}</strong></div>
+                                {% endfor %}
+                            {% else %}
+                                <strong>{{ "{:,}".format(task.current_amount|int) }}</strong>
+                            {% endif %}
+                        </td>
+                        <td data-label="สถานะ" class="text-center"><span class="badge badge-{{ task.status }}">{{ get_status_th(task.status) }}</span></td>
+                        <td data-label="จัดการ" class="text-center">
+                            <div class="btn-group" style="gap: 0.25rem;">
+                                <button class="btn btn-sm btn-info" onclick="showEditTaskModal({{ task.id }})">
+                                    <i class="fas fa-edit"></i> แก้ไข
+                                </button>
+                                {% if not task.farmer_id %}
+                                <button class="btn btn-sm btn-primary" onclick="showAssignModal({{ task.id }})">มอบหมาย</button>
+                                {% else %}
+                                <button class="btn btn-sm btn-secondary" onclick="showAssignModal({{ task.id }})">เปลี่ยน</button>
+                                <button class="btn btn-sm btn-danger" onclick="unassignTask({{ task.id }})">ถอดออก</button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p>ยังไม่มี Task</p>
+        {% endif %}
+    </div>
+
+    <div class="mt-3">
+        <h3>Logs</h3>
+        {% if logs %}
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>เวลา</th>
+                        <th>ผู้ทำ</th>
+                        <th class="text-center">การกระทำ</th>
+                        <th class="text-right">จำนวน</th>
+                        <th>ข้อความ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td data-label="เวลา">{{ log.created_at.strftime('%d/%m/%Y %H:%M:%S') }}</td>
+                        <td data-label="ผู้ทำ">{{ log.actor.display_name if log.actor else log.actor_role }}</td>
+                        <td data-label="การกระทำ" class="text-center"><span class="badge badge-primary">{{ log.action }}</span></td>
+                        <td data-label="จำนวน" class="text-right number">{% if log.delta_amount != 0 %}{{ "{:,}".format(log.delta_amount) }}{% else %}-{% endif %}</td>
+                        <td data-label="ข้อความ">{{ log.message }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p>ยังไม่มี Log</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Create Task Modal -->
+<div id="createTaskModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 500px; margin: 2rem;">
+        <div class="card-header">
+            <h2>สร้าง Task ใหม่</h2>
+            <button onclick="hideCreateTaskModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+        </div>
+        <form id="createTaskForm" onsubmit="createTask(event)">
+            <input type="hidden" id="task_order_id" name="order_id">
+            <div class="form-group">
+                <label class="form-label">เซิร์ฟเวอร์</label>
+                <input type="text" name="server_name" class="form-control" placeholder="เว้นว่างเพื่อใช้ค่าเดียวกับออเดอร์">
+            </div>
+            <div class="form-group">
+                <label class="form-label">รายการของใน Task</label>
+                <div id="taskItemsList">
+                    <div class="order-item-row" style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                        <select name="item_type" class="form-control" style="flex: 1;" required>
+                            <option value="">เลือกประเภท</option>
+                            {% if order.order_items and order.order_items|length > 0 %}
+                                {% for item in order.order_items %}
+                                <option value="{{ item.item_type }}">{{ item.item_type|upper }}</option>
+                                {% endfor %}
+                            {% else %}
+                                <option value="{{ order.item_type }}">{{ order.item_type|upper }}</option>
+                            {% endif %}
+                            <option value="wood">Wood</option>
+                            <option value="stone">Stone</option>
+                            <option value="sulfur">Sulfur</option>
+                            <option value="metal">Metal</option>
+                            <option value="scrap">Scrap</option>
+                            <option value="hqm">HQM</option>
+                        </select>
+                        <input type="number" name="target_amount" class="form-control" style="flex: 1;" required min="1" placeholder="จำนวน">
+                        <button type="button" class="btn btn-danger btn-sm" onclick="removeTaskItem(this)" style="display: none;">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="addTaskItem()" style="margin-top: 0.5rem;">
+                    <i class="fas fa-plus"></i> เพิ่มรายการ
+                </button>
+                <small style="color: var(--text-secondary); display: block; margin-top: 0.5rem;">
+                    สามารถเพิ่มหลาย item types ใน Task เดียวได้ (เช่น Wood + HQM)
+                </small>
+            </div>
+            <div class="form-group">
+                <label class="form-label">มอบหมายให้ (ไม่บังคับ)</label>
+                <select name="farmer_id" class="form-control">
+                    <option value="">เลือกคนฟาร์ม</option>
+                    {% for farmer in farmers %}
+                    <option value="{{ farmer.id }}">
+                        {{ farmer.display_name or farmer.username }}
+                        {% if farmer_task_counts[farmer.id] > 0 %}
+                        (กำลังทำ {{ farmer_task_counts[farmer.id] }} งาน)
+                        {% else %}
+                        (ว่าง)
+                        {% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">เวลาเริ่มงาน (ไม่บังคับ)</label>
+                <input type="datetime-local" name="planned_start" class="form-control">
+                <small style="color: var(--text-secondary);">ระบุเวลาที่วางแผนจะเริ่มงาน</small>
+            </div>
+            <div class="form-group">
+                <label class="form-label">ระยะเวลาที่คาดว่าจะใช้ (ชั่วโมง) (ไม่บังคับ)</label>
+                <input type="number" name="planned_duration_hours" class="form-control" min="0" step="0.5" placeholder="เช่น 2.5">
+                <small style="color: var(--text-secondary);">ระบุเวลาที่คาดว่าจะใช้ในการฟาร์ม (ชั่วโมง)</small>
+            </div>
+            <div class="btn-group">
+                <button type="submit" class="btn btn-primary">สร้าง Task</button>
+                <button type="button" class="btn btn-secondary" onclick="hideCreateTaskModal()">ยกเลิก</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Assign Task Modal -->
+<div id="assignTaskModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 400px; margin: 2rem;">
+        <div class="card-header">
+            <h2>มอบหมายงาน</h2>
+            <button onclick="hideAssignModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+        </div>
+        <form id="assignTaskForm" onsubmit="assignTask(event)">
+            <input type="hidden" id="assign_task_id" name="task_id">
+            <div class="form-group">
+                <label class="form-label">เลือกคนฟาร์ม</label>
+                <select name="farmer_id" class="form-control" required>
+                    <option value="">เลือกคนฟาร์ม</option>
+                    {% for farmer in farmers %}
+                    <option value="{{ farmer.id }}">
+                        {{ farmer.display_name or farmer.username }}
+                        {% if farmer_task_counts[farmer.id] > 0 %}
+                        (กำลังทำ {{ farmer_task_counts[farmer.id] }} งาน)
+                        {% else %}
+                        (ว่าง)
+                        {% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+                <small style="color: var(--text-secondary); margin-top: 0.25rem; display: block;">
+                    หมายเหตุ: ตัวเลขในวงเล็บคือจำนวนงานที่กำลังทำอยู่
+                </small>
+            </div>
+            <div class="form-group">
+                <label class="form-label">เวลาเริ่มงาน (ไม่บังคับ)</label>
+                <input type="datetime-local" name="planned_start" class="form-control">
+                <small style="color: var(--text-secondary);">ระบุเวลาที่วางแผนจะเริ่มงาน</small>
+            </div>
+            <div class="form-group">
+                <label class="form-label">ระยะเวลาที่คาดว่าจะใช้ (ชั่วโมง) (ไม่บังคับ)</label>
+                <input type="number" name="planned_duration_hours" class="form-control" min="0" step="0.5" placeholder="เช่น 2.5">
+                <small style="color: var(--text-secondary);">ระบุเวลาที่คาดว่าจะใช้ในการฟาร์ม (ชั่วโมง)</small>
+            </div>
+            <div class="btn-group">
+                <button type="submit" class="btn btn-primary">มอบหมาย</button>
+                <button type="button" class="btn btn-secondary" onclick="hideAssignModal()">ยกเลิก</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Task Modal -->
+<div id="editTaskModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 500px; margin: 2rem; max-height: 90vh; overflow-y: auto;">
+        <div class="card-header">
+            <h2>แก้ไขข้อมูล Task</h2>
+            <button onclick="hideEditTaskModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+        </div>
+        <form id="editTaskForm" onsubmit="updateTask(event)">
+            <input type="hidden" id="edit_task_id" name="task_id">
+            <div class="form-group">
+                <label class="form-label">เซิร์ฟเวอร์</label>
+                <input type="text" name="server_name" class="form-control" id="edit_task_server_name">
+            </div>
+            <div class="form-group">
+                <label class="form-label">ประเภท</label>
+                <select name="item_type" class="form-control" id="edit_task_item_type">
+                    <option value="wood">WOOD</option>
+                    <option value="stone">STONE</option>
+                    <option value="sulfur">SULFUR</option>
+                    <option value="metal">METAL</option>
+                    <option value="scrap">SCRAP</option>
+                    <option value="hqm">HQM</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">เป้าหมาย</label>
+                <input type="number" name="target_amount" class="form-control" id="edit_task_target_amount" min="1" required>
+                <small style="color: var(--text-secondary);">หมายเหตุ: เป้าหมายใหม่ต้องไม่น้อยกว่าจำนวนปัจจุบัน</small>
+            </div>
+            <div class="form-group">
+                <label class="form-label">เวลาเริ่มงาน (ไม่บังคับ)</label>
+                <input type="datetime-local" name="planned_start" class="form-control" id="edit_task_planned_start">
+            </div>
+            <div class="form-group">
+                <label class="form-label">ระยะเวลาที่คาดว่าจะใช้ (ชั่วโมง) (ไม่บังคับ)</label>
+                <input type="number" name="planned_duration_hours" class="form-control" id="edit_task_planned_duration_hours" min="0" step="0.5" placeholder="เช่น 2.5">
+            </div>
+            <div class="btn-group">
+                <button type="submit" class="btn btn-primary">บันทึก</button>
+                <button type="button" class="btn btn-secondary" onclick="hideEditTaskModal()">ยกเลิก</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Task Modal -->
+<div id="editTaskModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 500px; margin: 2rem; max-height: 90vh; overflow-y: auto;">
+        <div class="card-header">
+            <h2>แก้ไขข้อมูล Task</h2>
+            <button onclick="hideEditTaskModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+        </div>
+        <form id="editTaskForm" onsubmit="updateTask(event)">
+            <input type="hidden" id="edit_task_id" name="task_id">
+            <div class="form-group">
+                <label class="form-label">เซิร์ฟเวอร์</label>
+                <input type="text" name="server_name" class="form-control" id="edit_task_server_name">
+            </div>
+            <div class="form-group">
+                <label class="form-label">ประเภท</label>
+                <select name="item_type" class="form-control" id="edit_task_item_type">
+                    <option value="wood">WOOD</option>
+                    <option value="stone">STONE</option>
+                    <option value="sulfur">SULFUR</option>
+                    <option value="metal">METAL</option>
+                    <option value="scrap">SCRAP</option>
+                    <option value="hqm">HQM</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">เป้าหมาย</label>
+                <input type="number" name="target_amount" class="form-control" id="edit_task_target_amount" min="1" required>
+                <small style="color: var(--text-secondary);">หมายเหตุ: เป้าหมายใหม่ต้องไม่น้อยกว่าจำนวนปัจจุบัน</small>
+            </div>
+            <div class="form-group">
+                <label class="form-label">เวลาเริ่มงาน (ไม่บังคับ)</label>
+                <input type="datetime-local" name="planned_start" class="form-control" id="edit_task_planned_start">
+            </div>
+            <div class="form-group">
+                <label class="form-label">ระยะเวลาที่คาดว่าจะใช้ (ชั่วโมง) (ไม่บังคับ)</label>
+                <input type="number" name="planned_duration_hours" class="form-control" id="edit_task_planned_duration_hours" min="0" step="0.5" placeholder="เช่น 2.5">
+            </div>
+            <div class="btn-group">
+                <button type="submit" class="btn btn-primary">บันทึก</button>
+                <button type="button" class="btn btn-secondary" onclick="hideEditTaskModal()">ยกเลิก</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Order Modal -->
+<div id="editOrderModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 500px; margin: 2rem; max-height: 90vh; overflow-y: auto;">
+        <div class="card-header">
+            <h2>แก้ไขข้อมูลออเดอร์</h2>
+            <button onclick="hideEditOrderModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+        </div>
+        <form id="editOrderForm" onsubmit="updateOrder(event)">
+            <input type="hidden" name="order_id" value="{{ order.id }}">
+            <div class="form-group">
+                <label class="form-label">ลูกค้า</label>
+                <input type="text" name="customer_ref" class="form-control" id="edit_customer_ref" value="{{ order.customer_ref or '' }}">
+            </div>
+            <div class="form-group">
+                <label class="form-label">เซิร์ฟเวอร์</label>
+                <input type="text" name="server_name" class="form-control" id="edit_server_name" value="{{ order.server_name or '' }}">
+            </div>
+            <div class="form-group">
+                <label class="form-label">ประเภท</label>
+                <select name="item_type" class="form-control" id="edit_item_type">
+                    <option value="wood" {% if order.item_type == 'wood' %}selected{% endif %}>WOOD</option>
+                    <option value="stone" {% if order.item_type == 'stone' %}selected{% endif %}>STONE</option>
+                    <option value="sulfur" {% if order.item_type == 'sulfur' %}selected{% endif %}>SULFUR</option>
+                    <option value="metal" {% if order.item_type == 'metal' %}selected{% endif %}>METAL</option>
+                    <option value="scrap" {% if order.item_type == 'scrap' %}selected{% endif %}>SCRAP</option>
+                    <option value="hqm" {% if order.item_type == 'hqm' %}selected{% endif %}>HQM</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">เป้าหมาย</label>
+                <input type="number" name="target_amount" class="form-control" id="edit_target_amount" value="{{ order.target_amount }}" min="1" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">ส่วนลดให้ลูกค้า (%)</label>
+                <input type="number" name="discount_percent" class="form-control" id="edit_discount_percent" value="{{ order.discount_percent or 0 }}" min="0" max="100" step="0.1">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Priority</label>
+                <select name="priority" class="form-control" id="edit_priority">
+                    <option value="normal" {% if order.priority == 'normal' %}selected{% endif %}>ปกติ</option>
+                    <option value="express" {% if order.priority == 'express' %}selected{% endif %}>ด่วน</option>
+                </select>
+            </div>
+            <div class="btn-group">
+                <button type="submit" class="btn btn-primary">บันทึก</button>
+                <button type="button" class="btn btn-secondary" onclick="hideEditOrderModal()">ยกเลิก</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Auto-refresh ทุก 60 วินาที (1 นาที)
+let refreshInterval = null;
+let autoRefreshEnabled = localStorage.getItem('autoRefresh') !== 'false';
+
+function startAutoRefresh() {
+    if (refreshInterval) clearInterval(refreshInterval);
+    if (autoRefreshEnabled) {
+        refreshInterval = setInterval(() => {
+            location.reload();
+        }, 60000); // 60 วินาที
+    }
+}
+
+function toggleAutoRefresh() {
+    autoRefreshEnabled = !autoRefreshEnabled;
+    localStorage.setItem('autoRefresh', autoRefreshEnabled);
+    startAutoRefresh();
+    const btn = document.getElementById('toggleRefreshBtn');
+    if (btn) {
+        btn.innerHTML = autoRefreshEnabled 
+            ? '<i class="fas fa-pause"></i> หยุด Auto-Refresh' 
+            : '<i class="fas fa-play"></i> เปิด Auto-Refresh';
+        btn.className = autoRefreshEnabled ? 'btn btn-warning' : 'btn btn-success';
+    }
+}
+
+startAutoRefresh();
+
+function updateOrderNote(orderId) {
+    const note = document.getElementById('orderNote').value;
+    
+    const csrfToken = getCsrfToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+    
+    fetch(`/api/admin/order/${orderId}/note`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({ note: note, csrf_token: csrfToken })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showToast('บันทึกหมายเหตุสำเร็จ', 'success');
+        } else {
+            showToast(data.error || 'เกิดข้อผิดพลาด', 'error');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('เกิดข้อผิดพลาดในการบันทึกหมายเหตุ');
+    });
+}
+
+function duplicateOrder(orderId) {
+    showConfirmModal('ต้องการคัดลอกออเดอร์นี้หรือไม่?', () => {
+        const csrfToken = getCsrfToken();
+        const headers = { 'Content-Type': 'application/json' };
+        if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+        
+        fetch(`/api/admin/order/${orderId}/duplicate`, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ csrf_token: csrfToken })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast(`คัดลอกออเดอร์สำเร็จ! Order Key: ${data.order_key}`, 'success');
+                setTimeout(() => {
+                    window.location.href = '{{ url_for("admin_orders") }}';
+                }, 1000);
+            } else {
+                showToast(data.error || 'เกิดข้อผิดพลาด', 'error');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showToast('เกิดข้อผิดพลาดในการคัดลอกออเดอร์', 'error');
+        });
+    });
+}
+
+function deleteOrder(orderId, orderKey) {
+    showConfirmModal(
+        `คุณแน่ใจหรือไม่ว่าต้องการลบออเดอร์ "${orderKey}"?\n\nการลบนี้จะลบ:\n- ออเดอร์\n- งานทั้งหมดที่เกี่ยวข้อง\n- ประวัติการทำงาน\n\n⚠️ การกระทำนี้ไม่สามารถยกเลิกได้!`,
+        () => {
+            const loadingToast = showToast('กำลังลบออเดอร์...', 'info', 0); // 0 = ไม่หายอัตโนมัติ
+            const csrfToken = getCsrfToken();
+            const headers = { 'Content-Type': 'application/json' };
+            if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+            
+            fetch(`/api/admin/order/${orderId}`, {
+                method: 'DELETE',
+                headers: headers,
+                body: JSON.stringify({ csrf_token: csrfToken })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (loadingToast && loadingToast.parentNode) {
+                    removeToast(loadingToast);
+                }
+                if (data.success) {
+                    showToast('ลบออเดอร์สำเร็จ', 'success', 3000);
+                    setTimeout(() => {
+                        window.location.href = '{{ url_for("admin_orders") }}';
+                    }, 1500);
+                } else {
+                    showToast(data.error || 'เกิดข้อผิดพลาด', 'error', 7000);
+                }
+            })
+            .catch(err => {
+                if (loadingToast && loadingToast.parentNode) {
+                    removeToast(loadingToast);
+                }
+                console.error(err);
+                showToast('เกิดข้อผิดพลาดในการลบออเดอร์', 'error', 7000);
+            });
+        }
+    );
+}
+
+function showEditTaskModal(taskId) {
+    fetch(`/api/admin/task/${taskId}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success && data.task) {
+                const task = data.task;
+                document.getElementById('edit_task_id').value = taskId;
+                document.getElementById('edit_task_server_name').value = task.server_name || '';
+                document.getElementById('edit_task_item_type').value = task.item_type || 'wood';
+                document.getElementById('edit_task_target_amount').value = task.target_amount || 0;
+                if (task.planned_start) {
+                    const date = new Date(task.planned_start);
+                    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+                    document.getElementById('edit_task_planned_start').value = localDate.toISOString().slice(0, 16);
+                } else {
+                    document.getElementById('edit_task_planned_start').value = '';
+                }
+                document.getElementById('edit_task_planned_duration_hours').value = task.planned_duration_hours || '';
+                document.getElementById('editTaskModal').style.display = 'flex';
+            } else {
+                showToast(data.error || 'ไม่พบข้อมูล Task', 'error');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showToast('เกิดข้อผิดพลาดในการดึงข้อมูล', 'error');
+        });
+}
+
+function hideEditTaskModal() {
+    document.getElementById('editTaskModal').style.display = 'none';
+}
+
+function updateTask(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    const taskId = formData.get('task_id');
+    const data = {
+        server_name: formData.get('server_name'),
+        item_type: formData.get('item_type'),
+        target_amount: parseInt(formData.get('target_amount')),
+        planned_start: formData.get('planned_start') || null,
+        planned_duration_hours: formData.get('planned_duration_hours') || null
+    };
+    
+    showLoading(form.querySelector('button[type="submit"]'));
+    
+    const csrfToken = getCsrfToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+    data.csrf_token = csrfToken;
+    
+    fetch(`/api/admin/task/${taskId}`, {
+        method: 'PATCH',
+        headers: headers,
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        hideLoading(form.querySelector('button[type="submit"]'));
+        if (data.success) {
+            showToast('บันทึกข้อมูลสำเร็จ', 'success');
+            // อัพเดตข้อมูลในหน้า
+            if (data.task) {
+                document.getElementById(`task_${taskId}_server_name`).textContent = data.task.server_name || '-';
+                document.getElementById(`task_${taskId}_target_amount`).textContent = data.task.target_amount.toLocaleString();
+            }
+            hideEditTaskModal();
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(data.error || 'เกิดข้อผิดพลาด', 'error');
+        }
+    })
+    .catch(err => {
+        hideLoading(form.querySelector('button[type="submit"]'));
+        console.error(err);
+        showToast('เกิดข้อผิดพลาด', 'error');
+    });
+}
+
+function showEditTaskModal(taskId) {
+    fetch(`/api/admin/task/${taskId}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success && data.task) {
+                const task = data.task;
+                document.getElementById('edit_task_id').value = taskId;
+                document.getElementById('edit_task_server_name').value = task.server_name || '';
+                document.getElementById('edit_task_item_type').value = task.item_type || 'wood';
+                document.getElementById('edit_task_target_amount').value = task.target_amount || 0;
+                if (task.planned_start) {
+                    const date = new Date(task.planned_start);
+                    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+                    document.getElementById('edit_task_planned_start').value = localDate.toISOString().slice(0, 16);
+                } else {
+                    document.getElementById('edit_task_planned_start').value = '';
+                }
+                document.getElementById('edit_task_planned_duration_hours').value = task.planned_duration_hours || '';
+                document.getElementById('editTaskModal').style.display = 'flex';
+            } else {
+                showToast(data.error || 'ไม่พบข้อมูล Task', 'error');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showToast('เกิดข้อผิดพลาดในการดึงข้อมูล', 'error');
+        });
+}
+
+function hideEditTaskModal() {
+    document.getElementById('editTaskModal').style.display = 'none';
+}
+
+function updateTask(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    const taskId = formData.get('task_id');
+    const data = {
+        server_name: formData.get('server_name'),
+        item_type: formData.get('item_type'),
+        target_amount: parseInt(formData.get('target_amount')),
+        planned_start: formData.get('planned_start') || null,
+        planned_duration_hours: formData.get('planned_duration_hours') || null
+    };
+    
+    showLoading(form.querySelector('button[type="submit"]'));
+    
+    const csrfToken = getCsrfToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+    data.csrf_token = csrfToken;
+    
+    fetch(`/api/admin/task/${taskId}`, {
+        method: 'PATCH',
+        headers: headers,
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        hideLoading(form.querySelector('button[type="submit"]'));
+        if (data.success) {
+            showToast('บันทึกข้อมูลสำเร็จ', 'success');
+            // อัพเดตข้อมูลในหน้า
+            if (data.task) {
+                document.getElementById(`task_${taskId}_server_name`).textContent = data.task.server_name || '-';
+                document.getElementById(`task_${taskId}_target_amount`).textContent = data.task.target_amount.toLocaleString();
+            }
+            hideEditTaskModal();
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(data.error || 'เกิดข้อผิดพลาด', 'error');
+        }
+    })
+    .catch(err => {
+        hideLoading(form.querySelector('button[type="submit"]'));
+        console.error(err);
+        showToast('เกิดข้อผิดพลาด', 'error');
+    });
+}
+
+function updateStatus(orderId) {
+    const status = document.getElementById('statusSelect').value;
+    const csrfToken = getCsrfToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+    
+    fetch(`/api/admin/order/${orderId}/status`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({ status: status, csrf_token: csrfToken })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'เกิดข้อผิดพลาด');
+        }
+    });
+}
+
+// คำนวณเวลาที่ใช้ในการฟาร์มอัตโนมัติ
+function calculateDuration(itemType, targetAmount) {
+    if (!itemType || !targetAmount || targetAmount <= 0) {
+        return null;
+    }
+    
+    // อัตราการฟาร์มเริ่มต้น (จะอัพเดตจาก settings จริงๆ ในอนาคต)
+    const rates = {
+        'wood': 4800,
+        'stone': 4800,
+        'sulfur': 4800,
+        'metal': 4800,
+        'scrap': 4800,
+        'hqm': 4800
+    };
+    
+    const rate = rates[itemType.toLowerCase()] || 4800;
+    const hours = targetAmount / rate;
+    return Math.round(hours * 100) / 100; // ปัดเป็น 2 ตำแหน่ง
+}
+
+function addTaskItem() {
+    const itemsList = document.getElementById('taskItemsList');
+    if (!itemsList) return;
+    
+    const itemRow = document.createElement('div');
+    itemRow.className = 'order-item-row';
+    itemRow.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 0.5rem;';
+    itemRow.innerHTML = `
+        <select name="item_type" class="form-control" style="flex: 1;" required>
+            <option value="">เลือกประเภท</option>
+            <option value="wood">Wood</option>
+            <option value="stone">Stone</option>
+            <option value="sulfur">Sulfur</option>
+            <option value="metal">Metal</option>
+            <option value="scrap">Scrap</option>
+            <option value="hqm">HQM</option>
+        </select>
+        <input type="number" name="target_amount" class="form-control" style="flex: 1;" required min="1" placeholder="จำนวน">
+        <button type="button" class="btn btn-danger btn-sm" onclick="removeTaskItem(this)">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    itemsList.appendChild(itemRow);
+    updateTaskRemoveButtons();
+}
+
+function removeTaskItem(btn) {
+    btn.closest('.order-item-row').remove();
+    updateTaskRemoveButtons();
+}
+
+function updateTaskRemoveButtons() {
+    const rows = document.querySelectorAll('#taskItemsList .order-item-row');
+    rows.forEach(row => {
+        const removeBtn = row.querySelector('button.btn-danger');
+        if (removeBtn) {
+            removeBtn.style.display = rows.length > 1 ? 'block' : 'none';
+        }
+    });
+}
+
+function showCreateTaskModal(orderId) {
+    document.getElementById('task_order_id').value = orderId;
+    document.getElementById('createTaskModal').style.display = 'flex';
+    
+    // Reset form และ reset items list
+    document.getElementById('createTaskForm').reset();
+    document.getElementById('task_order_id').value = orderId;
+    
+    // Reset items list to single item
+    const itemsList = document.getElementById('taskItemsList');
+    if (itemsList) {
+        itemsList.innerHTML = `
+            <div class="order-item-row" style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                <select name="item_type" class="form-control" style="flex: 1;" required>
+                    <option value="">เลือกประเภท</option>
+                    <option value="wood">Wood</option>
+                    <option value="stone">Stone</option>
+                    <option value="sulfur">Sulfur</option>
+                    <option value="metal">Metal</option>
+                    <option value="scrap">Scrap</option>
+                    <option value="hqm">HQM</option>
+                </select>
+                <input type="number" name="target_amount" class="form-control" style="flex: 1;" required min="1" placeholder="จำนวน">
+                <button type="button" class="btn btn-danger btn-sm" onclick="removeTaskItem(this)" style="display: none;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+        updateTaskRemoveButtons();
+    }
+    
+    // Setup duration calculator
+    setTimeout(function() {
+        const targetInput = document.querySelector('#createTaskForm input[name="target_amount"]');
+        const itemTypeSelect = document.querySelector('#createTaskForm select[name="item_type"]');
+        const durationInput = document.querySelector('#createTaskForm #planned_duration_hours_input');
+        const calculatedDiv = document.querySelector('#createTaskForm #calculated_duration');
+        const calculatedHours = document.querySelector('#createTaskForm #calculated_hours');
+        
+        function updateCalculatedDuration() {
+            if (targetInput && itemTypeSelect && durationInput) {
+                const targetAmount = parseInt(targetInput.value);
+                const itemType = itemTypeSelect.value;
+                
+                if (targetAmount > 0 && itemType && !durationInput.value) {
+                    const hours = calculateDuration(itemType, targetAmount);
+                    if (hours && calculatedDiv && calculatedHours) {
+                        calculatedHours.textContent = hours.toFixed(2);
+                        calculatedDiv.style.display = 'block';
+                    } else if (calculatedDiv) {
+                        calculatedDiv.style.display = 'none';
+                    }
+                } else if (calculatedDiv) {
+                    calculatedDiv.style.display = 'none';
+                }
+            }
+        }
+        
+        if (targetInput) {
+            targetInput.removeEventListener('input', updateCalculatedDuration);
+            targetInput.addEventListener('input', updateCalculatedDuration);
+        }
+        if (itemTypeSelect) {
+            itemTypeSelect.removeEventListener('change', updateCalculatedDuration);
+            itemTypeSelect.addEventListener('change', updateCalculatedDuration);
+        }
+        if (durationInput) {
+            durationInput.removeEventListener('input', function() {
+                if (this.value && calculatedDiv) {
+                    calculatedDiv.style.display = 'none';
+                } else {
+                    updateCalculatedDuration();
+                }
+            });
+            durationInput.addEventListener('input', function() {
+                if (this.value && calculatedDiv) {
+                    calculatedDiv.style.display = 'none';
+                } else {
+                    updateCalculatedDuration();
+                }
+            });
+        }
+    }, 100);
+}
+
+function hideCreateTaskModal() {
+    document.getElementById('createTaskModal').style.display = 'none';
+}
+
+// คำนวณเวลาที่ใช้ในการฟาร์มอัตโนมัติ
+function calculateDuration(itemType, targetAmount) {
+    if (!itemType || !targetAmount || targetAmount <= 0) {
+        return null;
+    }
+    
+    // อัตราการฟาร์มเริ่มต้น (จะอัพเดตจาก settings จริงๆ ในอนาคต)
+    const rates = {
+        'wood': 4800,
+        'stone': 4800,
+        'sulfur': 4800,
+        'metal': 4800,
+        'scrap': 4800,
+        'hqm': 4800
+    };
+    
+    const rate = rates[itemType.toLowerCase()] || 4800;
+    const hours = targetAmount / rate;
+    return Math.round(hours * 100) / 100; // ปัดเป็น 2 ตำแหน่ง
+}
+
+// อัพเดตเวลาที่คำนวณได้เมื่อเปลี่ยนเป้าหมายหรือประเภท
+document.addEventListener('DOMContentLoaded', function() {
+    const targetInput = document.querySelector('input[name="target_amount"]');
+    const itemTypeSelect = document.querySelector('select[name="item_type"]');
+    const durationInput = document.getElementById('planned_duration_hours_input');
+    const calculatedDiv = document.getElementById('calculated_duration');
+    const calculatedHours = document.getElementById('calculated_hours');
+    
+    function updateCalculatedDuration() {
+        if (targetInput && itemTypeSelect && durationInput) {
+            const targetAmount = parseInt(targetInput.value);
+            const itemType = itemTypeSelect.value;
+            
+            if (targetAmount > 0 && itemType && !durationInput.value) {
+                const hours = calculateDuration(itemType, targetAmount);
+                if (hours) {
+                    calculatedHours.textContent = hours.toFixed(2);
+                    calculatedDiv.style.display = 'block';
+                } else {
+                    calculatedDiv.style.display = 'none';
+                }
+            } else {
+                calculatedDiv.style.display = 'none';
+            }
+        }
+    }
+    
+    if (targetInput) targetInput.addEventListener('input', updateCalculatedDuration);
+    if (itemTypeSelect) itemTypeSelect.addEventListener('change', updateCalculatedDuration);
+    if (durationInput) {
+        durationInput.addEventListener('input', function() {
+            if (this.value) {
+                calculatedDiv.style.display = 'none';
+            } else {
+                updateCalculatedDuration();
+            }
+        });
+    }
+});
+
+function createTask(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    const orderId = formData.get('order_id');
+    
+    // รวบรวม items จาก taskItemsList
+    const itemRows = form.querySelectorAll('#taskItemsList .order-item-row');
+    const items = [];
+    itemRows.forEach(row => {
+        const itemType = row.querySelector('select[name="item_type"]').value;
+        const targetAmount = parseInt(row.querySelector('input[name="target_amount"]').value);
+        if (itemType && targetAmount > 0) {
+            items.push({
+                item_type: itemType,
+                target_amount: targetAmount
+            });
+        }
+    });
+    
+    if (items.length === 0) {
+        showToast('กรุณาเพิ่มอย่างน้อย 1 รายการ', 'error');
+        return;
+    }
+    
+    const data = {
+        items: items,  // ส่ง items array
+        server_name: formData.get('server_name') || null,
+        farmer_id: formData.get('farmer_id') || null,
+        planned_start: formData.get('planned_start') || null,
+        planned_duration_hours: formData.get('planned_duration_hours') ? parseFloat(formData.get('planned_duration_hours')) : null
+    };
+
+    const csrfToken = getCsrfToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+    data.csrf_token = csrfToken;
+    
+    fetch(`/api/admin/order/${orderId}/task`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showToast('สร้าง Task สำเร็จ', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(data.error || 'เกิดข้อผิดพลาด', 'error');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        showToast('เกิดข้อผิดพลาดในการสร้าง Task', 'error');
+    });
+}
+
+function showAssignModal(taskId) {
+    document.getElementById('assign_task_id').value = taskId;
+    document.getElementById('assignTaskModal').style.display = 'flex';
+}
+
+function hideAssignModal() {
+    document.getElementById('assignTaskModal').style.display = 'none';
+}
+
+function assignTask(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    const taskId = formData.get('task_id');
+    const data = {
+        farmer_id: parseInt(formData.get('farmer_id')),
+        planned_start: formData.get('planned_start') || null,
+        planned_duration_hours: formData.get('planned_duration_hours') ? parseFloat(formData.get('planned_duration_hours')) : null
+    };
+
+    const csrfToken = getCsrfToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+    data.csrf_token = csrfToken;
+    
+    fetch(`/api/admin/task/${taskId}/assign`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'เกิดข้อผิดพลาด');
+        }
+    });
+}
+
+function unassignTask(taskId) {
+    if (!confirm('คุณต้องการถอดคนฟาร์มออกจากงานนี้หรือไม่?')) {
+        return;
+    }
+    
+    const csrfToken = getCsrfToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+    
+    fetch(`/api/admin/task/${taskId}/unassign`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({ csrf_token: csrfToken })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('ถอดคนฟาร์มออกจากงานสำเร็จ!');
+            location.reload();
+        } else {
+            alert(data.error || 'เกิดข้อผิดพลาด');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('เกิดข้อผิดพลาดในการถอดคนฟาร์มออกจากงาน');
+    });
+}
+</script>
+{% endblock %}
+

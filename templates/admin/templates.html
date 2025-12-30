@@ -1,0 +1,416 @@
+{% extends "base.html" %}
+
+{% block title %}เทมเพลตออเดอร์ - Termdee Farm{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="card-title">เทมเพลตออเดอร์</h1>
+        <button class="btn btn-primary" onclick="showCreateTemplateModal()">สร้างเทมเพลตใหม่</button>
+    </div>
+
+    {% if templates %}
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ชื่อเทมเพลต</th>
+                    <th>ลูกค้า</th>
+                    <th>เซิร์ฟเวอร์</th>
+                    <th>ประเภท</th>
+                    <th class="text-right">เป้าหมาย</th>
+                    <th class="text-center">ส่วนลด (%)</th>
+                    <th class="text-center">จัดการ</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for template in templates %}
+                <tr>
+                    <td data-label="ชื่อเทมเพลต"><strong>{{ template.name }}</strong></td>
+                    <td data-label="ลูกค้า">{{ template.customer_ref or '-' }}</td>
+                    <td data-label="เซิร์ฟเวอร์">{{ template.server_name or '-' }}</td>
+                    <td data-label="ประเภท"><span class="item-{{ template.item_type }}">{{ template.item_type|upper if template.item_type else '-' }}</span></td>
+                    <td data-label="เป้าหมาย" class="text-right number">{{ "{:,}".format(template.target_amount|int) if template.target_amount else '-' }}</td>
+                    <td data-label="ส่วนลด (%)" class="text-center">{{ template.discount_percent or 0 }}%</td>
+                    <td data-label="จัดการ" class="text-center">
+                        <div class="btn-group" style="gap: 0.25rem;">
+                            <button class="btn btn-sm btn-success" onclick="useTemplate({{ template.id }})">ใช้</button>
+                            <button class="btn btn-sm btn-primary" onclick="showEditTemplateModal({{ template.id }})">แก้ไข</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteTemplate({{ template.id }}, '{{ template.name }}')">ลบ</button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-center">ยังไม่มีเทมเพลต</p>
+    {% endif %}
+</div>
+
+<!-- Create Template Modal -->
+<div id="createTemplateModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 500px; margin: 2rem;">
+        <div class="card-header">
+            <h2>สร้างเทมเพลตออเดอร์</h2>
+            <button onclick="hideCreateTemplateModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+        </div>
+        <form id="createTemplateForm" onsubmit="createTemplate(event)">
+            <div class="form-group">
+                <label class="form-label">ชื่อเทมเพลต *</label>
+                <input type="text" name="name" class="form-control" required placeholder="เช่น ลูกค้า A - Sulfur 20k">
+            </div>
+            <div class="form-group">
+                <label class="form-label">UID/ชื่อลูกค้า</label>
+                <input type="text" name="customer_ref" class="form-control">
+            </div>
+            <div class="form-group">
+                <label class="form-label">เซิร์ฟเวอร์ Oxide</label>
+                <input type="text" name="server_name" class="form-control">
+            </div>
+            <div class="form-group">
+                <label class="form-label">รายการของ</label>
+                <div id="templateItemsList">
+                    <div class="order-item-row" style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                        <select name="item_type" class="form-control" style="flex: 1;" required>
+                            <option value="">เลือกประเภท</option>
+                            <option value="wood">Wood</option>
+                            <option value="stone">Stone</option>
+                            <option value="sulfur">Sulfur</option>
+                            <option value="metal">Metal</option>
+                            <option value="scrap">Scrap</option>
+                            <option value="hqm">HQM</option>
+                        </select>
+                        <input type="number" name="target_amount" class="form-control" style="flex: 1;" required min="1" placeholder="จำนวน">
+                        <button type="button" class="btn btn-danger btn-sm" onclick="removeTemplateItem(this)" style="display: none;">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="addTemplateItem()" style="margin-top: 0.5rem;">
+                    <i class="fas fa-plus"></i> เพิ่มรายการ
+                </button>
+            </div>
+            <div class="form-group">
+                <label class="form-label">ความสำคัญ</label>
+                <select name="priority" class="form-control">
+                    <option value="normal">ปกติ</option>
+                    <option value="express">ด่วน</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">ส่วนลดให้ลูกค้า (%)</label>
+                <input type="number" name="discount_percent" class="form-control" min="0" max="100" step="0.1" value="0">
+            </div>
+            <div class="form-group">
+                <label class="form-label">หมายเหตุ</label>
+                <textarea name="note_admin" class="form-control" rows="3"></textarea>
+            </div>
+            <div class="btn-group">
+                <button type="submit" class="btn btn-primary">สร้างเทมเพลต</button>
+                <button type="button" class="btn btn-secondary" onclick="hideCreateTemplateModal()">ยกเลิก</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Template Modal -->
+<div id="editTemplateModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 500px; margin: 2rem;">
+        <div class="card-header">
+            <h2>แก้ไขเทมเพลต</h2>
+            <button onclick="hideEditTemplateModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+        </div>
+        <form id="editTemplateForm" onsubmit="updateTemplate(event)">
+            <input type="hidden" id="editTemplateId" name="template_id">
+            <div class="form-group">
+                <label class="form-label">ชื่อเทมเพลต *</label>
+                <input type="text" id="editTemplateName" name="name" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">UID/ชื่อลูกค้า</label>
+                <input type="text" id="editTemplateCustomer" name="customer_ref" class="form-control">
+            </div>
+            <div class="form-group">
+                <label class="form-label">เซิร์ฟเวอร์ Oxide</label>
+                <input type="text" id="editTemplateServer" name="server_name" class="form-control">
+            </div>
+            <div class="form-group">
+                <label class="form-label">ประเภทของ</label>
+                <select id="editTemplateItemType" name="item_type" class="form-control">
+                    <option value="">เลือกประเภท</option>
+                    <option value="wood">Wood</option>
+                    <option value="stone">Stone</option>
+                    <option value="sulfur">Sulfur</option>
+                    <option value="metal">Metal</option>
+                    <option value="scrap">Scrap</option>
+                    <option value="hqm">HQM</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">เป้าหมาย</label>
+                <input type="number" id="editTemplateTarget" name="target_amount" class="form-control" min="0">
+            </div>
+            <div class="form-group">
+                <label class="form-label">ความสำคัญ</label>
+                <select id="editTemplatePriority" name="priority" class="form-control">
+                    <option value="normal">ปกติ</option>
+                    <option value="express">ด่วน</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">ส่วนลดให้ลูกค้า (%)</label>
+                <input type="number" id="editTemplateDiscount" name="discount_percent" class="form-control" min="0" max="100" step="0.1" value="0">
+            </div>
+            <div class="form-group">
+                <label class="form-label">หมายเหตุ</label>
+                <textarea id="editTemplateNote" name="note_admin" class="form-control" rows="3"></textarea>
+            </div>
+            <div class="btn-group">
+                <button type="submit" class="btn btn-primary">บันทึก</button>
+                <button type="button" class="btn btn-secondary" onclick="hideEditTemplateModal()">ยกเลิก</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function showCreateTemplateModal() {
+    document.getElementById('createTemplateModal').style.display = 'flex';
+}
+
+function hideCreateTemplateModal() {
+    document.getElementById('createTemplateModal').style.display = 'none';
+    document.getElementById('createTemplateForm').reset();
+}
+
+function showEditTemplateModal(templateId) {
+    // Load template data (you'll need to fetch this from server or pass via data attributes)
+    fetch(`/api/admin/template/${templateId}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('editTemplateId').value = templateId;
+                document.getElementById('editTemplateName').value = data.template.name;
+                document.getElementById('editTemplateCustomer').value = data.template.customer_ref || '';
+                document.getElementById('editTemplateServer').value = data.template.server_name || '';
+                document.getElementById('editTemplateItemType').value = data.template.item_type || '';
+                document.getElementById('editTemplateTarget').value = data.template.target_amount || 0;
+                document.getElementById('editTemplatePriority').value = data.template.priority || 'normal';
+                document.getElementById('editTemplateDiscount').value = data.template.discount_percent || 0;
+                document.getElementById('editTemplateNote').value = data.template.note_admin || '';
+                document.getElementById('editTemplateModal').style.display = 'flex';
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('เกิดข้อผิดพลาดในการโหลดข้อมูลเทมเพลต');
+        });
+}
+
+function hideEditTemplateModal() {
+    document.getElementById('editTemplateModal').style.display = 'none';
+}
+
+function addTemplateItem() {
+    const itemsList = document.getElementById('templateItemsList');
+    if (!itemsList) return;
+    
+    const itemRow = document.createElement('div');
+    itemRow.className = 'order-item-row';
+    itemRow.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 0.5rem;';
+    itemRow.innerHTML = `
+        <select name="item_type" class="form-control" style="flex: 1;" required>
+            <option value="">เลือกประเภท</option>
+            <option value="wood">Wood</option>
+            <option value="stone">Stone</option>
+            <option value="sulfur">Sulfur</option>
+            <option value="metal">Metal</option>
+            <option value="scrap">Scrap</option>
+            <option value="hqm">HQM</option>
+        </select>
+        <input type="number" name="target_amount" class="form-control" style="flex: 1;" required min="1" placeholder="จำนวน">
+        <button type="button" class="btn btn-danger btn-sm" onclick="removeTemplateItem(this)">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    itemsList.appendChild(itemRow);
+    updateTemplateRemoveButtons();
+}
+
+function removeTemplateItem(btn) {
+    btn.closest('.order-item-row').remove();
+    updateTemplateRemoveButtons();
+}
+
+function updateTemplateRemoveButtons() {
+    const rows = document.querySelectorAll('#templateItemsList .order-item-row');
+    rows.forEach(row => {
+        const removeBtn = row.querySelector('button.btn-danger');
+        if (removeBtn) {
+            removeBtn.style.display = rows.length > 1 ? 'block' : 'none';
+        }
+    });
+}
+
+function createTemplate(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    
+    // รวบรวม items
+    const itemRows = form.querySelectorAll('#templateItemsList .order-item-row');
+    const items = [];
+    itemRows.forEach(row => {
+        const itemType = row.querySelector('select[name="item_type"]').value;
+        const targetAmount = parseInt(row.querySelector('input[name="target_amount"]').value);
+        if (itemType && targetAmount > 0) {
+            items.push({
+                item_type: itemType,
+                target_amount: targetAmount
+            });
+        }
+    });
+    
+    if (items.length === 0) {
+        alert('กรุณาเพิ่มอย่างน้อย 1 รายการ');
+        return;
+    }
+    
+    // ใช้ item แรกเป็นค่า default สำหรับ backward compatibility
+    const firstItem = items[0];
+    const data = {
+        name: formData.get('name'),
+        customer_ref: formData.get('customer_ref') || '',
+        server_name: formData.get('server_name') || '',
+        item_type: firstItem.item_type,
+        target_amount: firstItem.target_amount,
+        items: items,  // ส่ง items array ไปด้วย
+        priority: formData.get('priority') || 'normal',
+        discount_percent: parseFloat(formData.get('discount_percent')) || 0,
+        note_admin: formData.get('note_admin') || ''
+    };
+
+    const csrfToken = getCsrfToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+    data.csrf_token = csrfToken;
+    
+    fetch('/api/admin/template', {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('สร้างเทมเพลตสำเร็จ');
+            location.reload();
+        } else {
+            alert(data.error || 'เกิดข้อผิดพลาด');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('เกิดข้อผิดพลาด');
+    });
+}
+
+function updateTemplate(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    const templateId = formData.get('template_id');
+    const data = Object.fromEntries(formData);
+    delete data.template_id;
+    data.target_amount = parseInt(data.target_amount) || 0;
+    data.discount_percent = parseFloat(data.discount_percent) || 0;
+
+    const csrfToken = getCsrfToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+    data.csrf_token = csrfToken;
+    
+    fetch(`/api/admin/template/${templateId}`, {
+        method: 'PUT',
+        headers: headers,
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('แก้ไขเทมเพลตสำเร็จ');
+            location.reload();
+        } else {
+            alert(data.error || 'เกิดข้อผิดพลาด');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('เกิดข้อผิดพลาด');
+    });
+}
+
+function useTemplate(templateId) {
+    if (!confirm('ต้องการใช้เทมเพลตนี้สร้างออเดอร์ใหม่หรือไม่?')) {
+        return;
+    }
+    
+    const csrfToken = getCsrfToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+    
+    fetch(`/api/admin/template/${templateId}/use`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({ csrf_token: csrfToken })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert(`สร้างออเดอร์สำเร็จ!\nOrder Key: ${data.order_key}`);
+            window.location.href = `/admin/order/${data.order_id}`;
+        } else {
+            alert(data.error || 'เกิดข้อผิดพลาด');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('เกิดข้อผิดพลาด');
+    });
+}
+
+function deleteTemplate(templateId, templateName) {
+    if (!confirm(`ต้องการลบเทมเพลต "${templateName}" หรือไม่?`)) {
+        return;
+    }
+    
+    const csrfToken = getCsrfToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+    
+    fetch(`/api/admin/template/${templateId}`, {
+        method: 'DELETE',
+        headers: headers,
+        body: JSON.stringify({ csrf_token: csrfToken })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('ลบเทมเพลตสำเร็จ');
+            location.reload();
+        } else {
+            alert(data.error || 'เกิดข้อผิดพลาด');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('เกิดข้อผิดพลาด');
+    });
+}
+</script>
+{% endblock %}
+
+
+
